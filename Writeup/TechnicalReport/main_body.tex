@@ -1,0 +1,298 @@
+\section{Introduction}
+blah blah blah background
+\subsection{Literature Review}
+what has been done, and where we have found it
+\subsection{Contributions}
+In short, what we have added
+\section{The Robust Vehicle Routing Problem}
+In this section, we build towards the mathematical formulation of the problem which we attempt to solve. First we outline notations and conventions which we use in this documents. 
+
+Let $\mathcal{N} = \{v_1, v_2, \ldots, v_n\}$ be a set of locations. Each location refers to a customer that we need to make a delivery to. The vehicle both begins and ends its journey at $v_1$, which we chose without loss of generality to be the depot's location. We also have a set $\mathcal{A}$ of directed edges which connect the elements of $\mathcal{N}$. When travelling between $v_i$ and $v_j$, we define $t_{ij}$ time required to travel along the edge connecting $v_i$ to $v_j$. 
+
+In general we write $|\mathcal{N}| = n$ and $|\mathcal{A}| = m$. Furthermore, we introduce an ordering of indices: $i_0, i_1, i_2, \ldots, i_n$ which refer to the order in which the vehicle arrives at its destinations. We define $T_{i_k}$ to be the arrival time of the vehicle at node $i_k$. As the vehicle always begins and ends its journey at the depot, we have $i_0 = i_n = 1$. Finally we choose $T_{i_0} $ to mean the time at which the vehicle returns to the depot, as opposed to the time of initial departure.
+
+\subsection{The Travelling Salesman Problem}
+In the classic travelling salesman problem, we seek to find a route which travels through all of the locations, returning to the depot in as short a time as possible. Let $\mathbf{x} \in \mathbb{B}^{m\times m}$ be our decision variable such that $x_{ij}=1$ iff the vehicle travels along the edge connecting $v_i$ and $v_j$. With this notation, we write out our objective function to minimise:
+
+\begin{equation}
+\label{def:tsp_objective}
+\text{TSP}(\mathbf{x}) = \sum \limits_{i,j = 1}^{n} x_{ij}t_{ij}.
+\end{equation}
+
+However, if we merely minimise TSP$(\mathbf{x})$, we will get a solution of all 0's, which does not actually solve our problem. In order for $\mathbf{x}$ to describe a plausible route, we need to introduce some constraints. We show the set $\mathbf{S}_{DFJ} $ derived by Dantzig et al \cite{dantzig1954solution} in equation \ref{def:domain_Sdfj}:
+
+\begin{equation}\label{def:domain_Sdfj}
+\mathcal{S}_{DFJ} = 
+\constraintset
+{
+	\left. \begin{array}{l} 
+	\mathbf{x} \in \{0,1\}^{m\times m} \\
+	\end{array}\right.
+}
+{
+	\sum \limits_{j = 1}^n x_{ij} = 1, \quad  i = 1, 2, \ldots, n \label{con:Sdfj1};
+	\sum \limits_{i=1}^n x_{ij} = 1, \quad j \in 1, 2, \ldots, n \label{con:Sdfj2};
+	\sum \limits_{v_i,v_j \in R,\, i \neq j}x_{ij} \leq |R|-1, \quad \forall R \subset \mathcal{N}, R \neq \emptyset \label{con:Sdfj3}.
+}
+\end{equation}
+
+What do these constraints accomplish? Constraint \ref{con:Sdfj1} requires that each node is travelled to exactly once. Similarly constraint \ref{con:Sdfj2} specifies that each node is exited exactly once. Finally constraint \ref{con:Sdfj3} ensures that the solution describes a single path, as opposed to multiple disjoint paths. 
+
+Therefore, the length of our shorted journey is given by:
+
+\begin{equation}
+\label{def:tsp_obj}
+\min \limits_{\mathbf{x} \in \mathcal{S}_{DFJ}} \sum \limits_{i,j = 1}^{n} x_{ij}t_{ij} .
+\end{equation}
+
+
+\subsection{Delivery Time Windows}
+
+
+In practice, when delivering to a customer, Tesco needs it vehicle to arrive when the customer is available to receive the delivery. We apply this to the travelling salesman problem as follows. For each node $v_i \in \mathcal{N}$, we associate a time interval $[\underline{\tau}_i, \overline{\tau}_i]$ during which the vehicle must arrive. That is we require $\underline{\tau}_i \leq T_i \leq \overline{\tau}_i, \quad \forall i$. We understand $\underline{\tau}_1$ and $\overline{\tau}_1$ to refer to the beginning and ending of the working day respectively. Without loss of generality, we choose $\underline{\tau}_1 = 0$, by shifting time accordingly.
+
+\subsubsection{Preprocessing Stage}
+The existence of delivery time windows provides a strong constraint on the order in which we may visit the nodes. In the standard TSP, any order is permissible, and we must consider all of them. However if we have: $\underline{\tau_i}+t_{ij} > \overline{\tau_j}$ then we must visit node $v_i$ before $v_j$. In other words, if it is not possible to service nod $v_i$, and then travel to node $v_j$, arriving within the time window, then $v_j$ must be visited before $v_i$. This motivates an ordering of indices. We write $i  \prec j$ if we must visit node $v_i$ before $v_j$, $i \sim j$ if we can equivalently service $i$ before $j$ and the other way around, and $i \llcurly j$ if there exists $k$ such that $i \prec k \prec j$. Note that these operations are not transitive.
+
+The first consequence of this ordering is that if $i \prec j$, then it must hold that $x_{ji}=0$. By using this we eliminate a large number of variables. However, we can go farther. If $i \llcurly j$, then we know that $x_{ij}=0$. This is because if we travel from $v_i$ to $v_k$, then there exists a node $v_k$ this is impossible to service, by definition of $\llcurly$. Therefore, the only values of $j$ for which $x_{ij}$ might be 1 are $j$ such that $i\sim j$ and $i \prec j$.
+
+\subsubsection{Formulation and Solution}
+
+In order to define constraints which ensure that these deadlines are met, we must explicitly state how to compute $T_i$. As things stand, we can only deduce what $T_i$ is once we know the order in which the customers are visited, which in turn requires problem \ref{def:tsp_obj} to be solved for us to know. In order to define a more direct computational method, we change the way that we formulate the set of feasible routes, using instead the set derived by Claus \cite{claus1984new}, and used by \cite{zhangrouting}:
+
+\begin{equation}\label{def:domain_s}
+\mathcal{S}_{CLS} = 
+\constraintset
+{
+	\left. \begin{array}{l} 
+	\mathbf{x} \in \{0,1\}^{|\mathcal{A}|} \\
+	\mathbf{s} \in \mathbb{R}_+^{|\mathcal{A}|\times |\mathcal{N}|} 
+	\end{array}\right.
+}
+{
+	\sum \limits_{a \in \delta^+(i)} x_a = 1, \quad \forall i \in \mathcal{N}_R \label{con:S1};
+	\sum \limits_{a \in \delta^-(i)} x_a = 1, \quad \forall i \in \mathcal{N}_R \label{con:S2};
+	s^l_a \leq x_a, \quad \forall l \in \mathcal{N}, a \in \mathcal{A}\label{con:S3};
+	\sum \limits_{a \in \delta^+(1)} s^l_a = 1, \quad \forall l \in \mathcal{N}_R \label{con:S4};
+	\sum \limits_{a \in \delta^+(i)} s_a^l - \sum \limits_{a \in \delta^-(i)}s^l_a=0 , \quad \forall l \in \mathcal{N}_R, i \in \mathcal{N}_R\setminus\{v_l\} \label{con:S5};
+	\sum \limits_{a \in \delta^+(l)} s_a^l - \sum \limits_{a \in \delta^-(l)}s^l_a=-1 , \quad \forall l \in \mathcal{N}_R \label{con:S6}
+}
+\end{equation}
+
+This set of constraints seems like an unnecessary complication after equation \ref{def:domain_Sdfj}, but has major advantages. To make this clear, consider the following intuitive description of the meaning of $\mathbf{s}$. For each node $v_i$, we have that $\mathbf{s}^i$ is a vector of length $m$, which takes the value 1 for all edges which are travelled to on the way to $v_i$. Alternatively we could think of the value of $x_e$ as the capacity of a pipe connecting two edges, and $s^i_e$ to be the flow of water along that pipe, which can be at most $x_e$.
+
+With this understanding, it is clear that we can define:
+\begin{equation}
+\label{def:arrival_time}
+\mathbf{T} = \mathbf{s} \mathbf{t},
+\end{equation}
+where $\mathbf{t}$ is the length $m$ vector which corresponds to $t_{ij}$, the time required to travel between $v_i$ and $v_j$, reshaped into vector form, and $\mathbf{s}$ is the matrix of slack variables defined in equation \ref{def:domain_s}. Therefore, the addition of delivery time windows simply results in the $2n$ additional constraints:
+\begin{equation}
+\label{con:det_time_windows}
+\underline{\tau}_i\leq T_i \leq \overline{\tau}_i, \quad \forall v_i \in \mathcal{N}.
+\end{equation}
+
+Therefore, our feasible set for the deterministic travelling salesman problem with time windows is:
+
+\begin{equation}\label{def:domain_s2}
+\mathcal{S}_{TW} = 
+\constraintset
+{
+	\left. \begin{array}{l} 
+	\mathbf{x} \in \{0,1\}^{|\mathcal{A}|} \\
+	\mathbf{s} \in \mathbb{R}_+^{|\mathcal{A}|\times |\mathcal{N}|} 
+	\end{array}\right.
+}
+{
+	\sum \limits_{a \in \delta^+(i)} x_a = 1, \quad \forall i \in \mathcal{N}_R \label{con:S2_1};
+	\sum \limits_{a \in \delta^-(i)} x_a = 1, \quad \forall i \in \mathcal{N}_R \label{con:S2_2};
+	s^l_a \leq x_a, \quad \forall l \in \mathcal{N}, a \in \mathcal{A}\label{con:S2_3};
+	\sum \limits_{a \in \delta^+(1)} s^l_a = 1, \quad \forall l \in \mathcal{N}_R \label{con:S2_4};
+	\sum \limits_{a \in \delta^+(i)} s_a^l - \sum \limits_{a \in \delta^-(i)}s^l_a=0 , \quad \forall l \in \mathcal{N}_R, i \in \mathcal{N}_R\setminus\{v_l\} \label{con:S2_5};
+	\sum \limits_{a \in \delta^+(l)} s_a^l - \sum \limits_{a \in \delta^-(l)}s^l_a=-1 , \quad \forall l \in \mathcal{N}_R \label{con:S2_6};
+	\sum \limits_{e \in \mathcal{A}} t_e s^l_e \leq \overline{\tau}_l, \quad \forall l \in \mathcal{N}_R \label{con:S2_7};
+	-\sum \limits_{e \in \mathcal{A}} t_e s^l_e \leq -\underline{\tau}_l, \quad \forall l \in \mathcal{N}_R \label{con:S2_8}
+}
+\end{equation}
+
+Therefore, all elements of $\mathcal{s}_{TW}$ refer to routes which the vehicle might take which result in all deliveries being made to the appropriate customer within the corresponding time slot. Given that this is satisfied, we then try to minimize the journey length.
+
+However, we have introduced a complication to our problem. The time window constraints \ref{con:S2_7} and \ref{con:S2_8} do not give rise to totally unimodular matrices. Therefore, we cannot simply solve our problem over $ \mathcal{S}_{TW}$ using the simplex algorithm and expect an integer solution. 
+
+\subsection{other stuff}
+\subsubsection{Notation}
+
+Let $\mathcal{G}$ = $(\mathcal{N}, \mathcal{A})$ be a directed network, where the set $\mathcal{N}$ is the set of nodes and $\mathcal{A}$ is the set of directed edges within the network. We denote the elements of $\mathcal{N}$ by $\mathcal{N} = \{v_1, v_2, \ldots, v_n\}$, where $n = |\mathcal{N}|$. We refer to a particular edge using $(i,j)$ or $a$ interchangeably. Specifically $(i,j)$ refers to the directed edge which joins $v_i$ to $v_j$. 
+
+\begin{definition}
+	Let $\mathcal{L} \subset \mathcal{N}$ be a subset of nodes. Then we define the set of \textit{entry edges} of $\mathcal{R}$ to be the set of edges which point to nodes in $\mathcal{R}$ while originating outside of $\mathcal{R}$. We denote this set mathematically by $\delta^-(\mathcal{R})$:
+	\begin{equation}
+	\label{def:entry_edges}
+	\delta^-(\mathcal{R}) := \{(i,j)\in \mathcal{A}:\,i \in \mathcal{N}\setminus \mathcal{R}, \, j \in \mathcal{R}\}.
+	\end{equation}
+	We define the set of \textit{exit edges} of $\mathcal{R}$ equivalently and denote it by $\delta^+(\mathcal{R})$:
+	\begin{equation}
+	\label{def:exit_edges}
+	\delta^+(\mathcal{R}) := \{(i,j)\in \mathcal{A}:\,i \in \mathcal{R}, \, j \in \mathcal{N}\setminus \mathcal{R}\}.
+	\end{equation}
+\end{definition}
+
+Without loss of generality, we choose the node $v_1$ to be location from which all delivery vehicles initially depart and ultimately return to. We seek a route by which a vehicle may start at the depot $v_1$, visit each other node exactly once, and ultimately return to the depot. This is merely the well known travelling salesman problem, however we now introduce further complications.
+
+First let $[\underline{\tau}_0, \overline{\tau}_0]$ refer to a time interval during which the entire journey must take place. That is the vehicle may not leave the depot before $\underline{\tau}_0$, and must not return after $\overline{\tau}_0$. We think of this bound as the working day. From Tesco's perspective, it is better for all deliveries to be made during this time frame so as to avoid overtime costs.
+
+In addition, we associate the time interval $[\underline{\tau}_i, \overline{\tau}_i]$ with the node $v_i$, where we demand that the vehicle must arrive at the node $v_i$ after the time $\underline{\tau}_i$ and before the time $\overline{\tau}_i$. These are the times in which the customer has stated that they are available to receive their order. As Tesco wishes to satisfy its customers, we therefore seek a solution which satisfies these time constraints.
+
+While we know the length of each edge (i.e. how long the road is), the time taken to travel along the edge $z_{ij}$ is unknown. This is because even for consistent traffic conditions there are many small variables which effect the total journey duration. We model this with an uncertainty set $\mathbb{F}$, which contains probability distributions $\mathbb{P}$. That is, we do not know the state of the road. However, if this (the state of the road) was known, then we have a known probability distribution for the journey time.
+
+We define $\mathbf{x}$ to be our decision variable. That is we have $x_{ij}=1$ iff the vehicle actually travels along the edge $(i,j)$, and otherwise is $0$. Therefore, $t_{ij} = x_{ij}z_{ij}$ refers to the time taken by the vehicle travelling along $(i,j)$.
+
+Suppose a particular route is chosen for the vehicle in which it visits all nodes in a particular order. Let the indices $i_1, i_2, \ldots, i_n, i_{n+1}$ refer to the order in which the nodes are visited. Note that this requires that $i_1 = i_{n+1} = 1$, as the vehicle both starts and finishes at the depot. 
+
+\begin{definition}
+	We define $T_{i_k}$ to be the \textit{arrival time} at the node $v_{i_k}$. We compute this as:
+	\begin{equation}
+		\label{def:arrival_time1}
+		T_{i_k} := \sum \limits_{j = 1}^{k-1} t_{i_j i_{j+1}}\
+	\end{equation}
+\end{definition} 
+
+Therefore our objective is to find a route such that $\underline{\tau}_{i_j}\leq T_{i_j} \leq \overline{\tau}_{i_j}, \quad \forall j$. The problem is that $\mathbf{T}$ is a vector of uncertain random variables9
+
+\subsubsection{The Lateness Index}
+
+We wish for all of the delivery vans to arrive at each destination within the appropriate time window. In order to do this, we introduce \textit{soft time constraints}, in which we measure how late (or early) a van is, and penalise this. The function we use to determine the penalty we call the lateness index \cite{jaillet2013routing,jaillet2016routing}. 
+
+Let ,  and is defined as follows:
+
+\begin{equation}
+\label{def:lateness_index}
+\rho_\tau(\tilde{\mathbf{t}})= \inf \limits_{\mathbf{\alpha} \geq 0} \left[\varphi(\mathbf{\alpha}) | C_{\alpha_i}(\tilde{t_i}) \leq \tau_i, C_{\alpha_i}(-\tilde{t_i}) \leq -\tau_i,  \quad i \in \mathcal{N}_D\right]
+\end{equation}
+
+where $C_{\alpha}(\tilde{t})$ satisfies
+
+\begin{equation}
+\label{def:lateness_index2}
+\sup \limits_{\mathbb{P} \in \mathbb{F}} \left[ C_{\alpha}(\tilde{t})= \alpha \ln \mathbb{E}_{\mathbb{P}} \left( \exp \left( \frac{\tilde{t}}{\alpha}\right)\right) \right]
+\end{equation}
+
+Suppose that $\underline{t} = \inf \limits_{\mathbb{P} \in \mathbb{F}} \inf \tilde{t}$ and $\overline{t} = \sup \limits_{\mathbb{P} \in \mathbb{F}} \sup \tilde{t}$, where $0 \leq a <b<\infty$. Then we have:
+
+\begin{align}
+\underline{t} &= \lim \limits_{\alpha \downarrow 0} C_{\alpha}(-\tilde{t}) \leq \lim \limits_{\alpha \rightarrow \infty} C_{\alpha}(-\tilde{t}) = \sup \limits_{\mathbb{P} \in \mathbb{F}} \mathbb{E}_{\mathbb{P}}(-\tilde{t})\\
+\overline{t} &= \lim \limits_{\alpha \downarrow 0} C_{\alpha}(\tilde{t}) \leq \lim \limits_{\alpha \rightarrow \infty} C_{\alpha}(\tilde{t}) = \sup \limits_{\mathbb{P} \in \mathbb{F}} \mathbb{E}_{\mathbb{P}}(\tilde{t})
+\end{align}
+
+\subsubsection{Formulating the Domain}
+
+
+\begin{equation}
+\label{def:domain_xsp}
+\mathcal{X}_{SP} = \left\{
+\left. \begin{array}{l} \mathbf{x} \in \{0,1\}^{|\mathcal{A}|}  \end{array} \right.  \left\vert
+\begin{array}{ll}
+\sum \limits_{a \in \delta^-(i)} x_a - \sum \limits_{a \in \delta^+(i)} x_a= 0, & \forall i \in \mathcal{N}, 
+\end{array}\right. \right\}.
+\end{equation}
+
+\begin{equation}
+\label{def:domain_xro}
+\mathcal{X}_{RO} = \left\{
+\left. \begin{array}{l} \mathbf{x} \in \{0,1\}^{|\mathcal{A}|}  \end{array} \right.  \left\vert
+\begin{array}{ll}
+\sum \limits_{a \in \delta^+(i)} x_a = 1, & i \in \mathcal{N}_R \\
+\sum \limits_{a \in \delta^-(i)} x_a = 1, & i \in \mathcal{N}_R \\
+\sum \limits_{a \in \delta^+(i)} x_a \leq= 1, & i \in \mathcal{N}\setminus \mathcal{N}_R \\
+\sum \limits_{a \in \delta^-(i)} x_a - \sum \limits_{a \in \delta^+(i)} x_a= 0, & i \in \mathcal{N} \setminus \mathcal{N}_R\\
+\end{array}\right. \right\}.
+\end{equation}
+
+\begin{equation}
+\label{def:domain1}
+\mathcal{J} = \left\{
+\left. \begin{array}{l} \mathbf{x} \in \mathcal{X}_{RO} \\\mathbf{s} \in \mathbb{R}_+^{|\mathcal{A}|\times |\mathcal{N}|} \end{array} \right.  \left\vert
+\begin{array}{ll}
+\sum \limits_{a \in \delta^-(i)} s^l_a - \sum \limits_{a \in \delta^+(i)} s^l_a = 0 & l \in \mathcal{N}, i \in \mathcal{N}\\ 
+\sum \limits_{a \in \delta^+(v_1)} s^l_a - \sum \limits_{a \in \delta^-(i)} x_a=0, & i \in \mathcal{N}\\
+\sum \limits_{a \in \delta^-(l)} s^l_a - \sum \limits_{a \in \delta^+(l)} s^l_a = \sum \limits_{a \in \delta^-(l)} x_a & l \in \mathcal{N}\\ 
+s^l_a \leq x_a, & l \in \mathcal{N}, a \in \mathcal{A},\\
+s^1_a = 0, & a \in \mathcal{A},
+\end{array}\right. \right\}.
+\end{equation}
+
+
+
+\begin{equation}
+\label{def:domain_sldr}
+\mathcal{S}_{LDR} = \left\{
+\left. \begin{array}{l} \mathbf{x} \in \mathcal{X}_{RO} \\\mathbf{s} \in \mathbb{R}_+^{|\mathcal{A}|\times |\mathcal{N}|} \end{array} \right.  \left\vert
+\begin{array}{ll}
+s^l_a - s^k_a \leq 1-x_{lk}, & a, (l,k) \in \mathcal{A}, a \neq (l,k), \\
+s^l_a - s^k_a \geq x_{lk}-1, & a, (l,k) \in \mathcal{A}, a \neq (l,k), \\
+s^l_a = x_a, & a \in \delta^-(l), l \in \mathcal{N},\\
+s^l_a =0 & a \in \delta^+(l), l \in \mathcal{N}\\
+\sum \limits_{a \in \mathcal{A}} s^l_a \leq |\mathcal{A}| \sum \limits_{a \in \delta^-{l}} x_a,& l \in \mathcal{N} \setminus \mathcal{N}_R
+\end{array}\right. \right\}.
+\end{equation}
+
+\begin{equation}
+\label{def:domain_smcf}
+\mathcal{S}_{MCF} = \left\{
+\left. \begin{array}{l} \mathbf{x} \in \mathcal{X}_{RO} \\\mathbf{s} \in \mathbb{R}_+^{|\mathcal{A}|\times |\mathcal{N}|} \end{array} \right.  \left\vert
+\begin{array}{ll}
+\sum \limits_{a \in \delta^-(i)}s^l_a - \sum \limits_{a \in \delta^+(i)} s^l_a = 0, & l \in \mathcal{N}, i \in \mathcal{N}\setminus\{l\}\\
+\sum \limits_{a \in \delta^+(v_1)}s^l_a - \sum \limits_{a \in \delta^-(i)} x_a = 0, & i \in \mathcal{N}\\
+\sum \limits_{a \in \delta^-(i)}s^l_a - \sum \limits_{a \in \delta^+(i)} s^l_a = \sum \limits_{a \in \delta^-(i)} x_a, &  i \in \mathcal{N},\\
+s^l_a \leq x_a, & l \in \mathcal{N}, a \in \mathcal{A},
+\end{array}\right. \right\}.
+\end{equation}
+
+\subsection{The Problem}
+We seek to find the best possible route for our delivery van to take such that it drives to each customer which has made an order and returns to the depot without visiting any location more than once. We describe a particular route by the vector $\mathbf{x}$, where $x_{e} = 1$ iff the vehicle travels along the directed edge $e$. We identify the `best' route as the one which minimizes the value of our objective function $\rho(\mathbf{x})$, subject to constraints. 
+
+\begin{equation}
+\label{def:simple_objective}
+\mathbf{x}^* := \arg \inf \limits_{\mathbf{x} \in \mathcal{S}} \rho(\mathbf{x}),
+\end{equation}
+where $\mathcal{S}$ is the set of feasible solutions for the asymmetric travelling salesman problem. There are multiple ways to formulate this set, each having a different number of constraints and dummy variables. We present a few of these below:
+
+\begin{enumerate}
+
+	
+	\item Another formulation was proposed by Miller et al \cite{miller1960integer} which greatly reduces the number of required constraints:
+	\begin{equation}\label{def:domain_smtz}
+	\mathcal{S}_{MTZ} = 
+	\constraintset
+	{
+		\left. \begin{array}{l} 
+		\mathbf{x} \in \{0,1\}^{|\mathcal{A}|} \\
+		\mathbf{s} \in \mathbb{Z}_+^{|\mathcal{N}|} 
+		\end{array}\right.
+	}
+	{
+		\sum \limits_{a \in \delta^+(i)} x_a = 1, \quad \forall i \in \mathcal{N}_R \label{con:Smtz1};
+		\sum \limits_{a \in \delta^-(i)} x_a = 1, \quad \forall i \in \mathcal{N}_R \label{con:Smtz2};
+		s_i - s_j + n x_{ij} \leq n-1, \quad \forall 2 \leq i \neq j  \leq n \label{con:Smtz3}
+	}
+	\end{equation}
+	This formulation requires $n+m$ variables, $n^2$ inequality constraints \cite{miller1960integer}, and $2r$ equality constraints. This is a huge improvement from previously, but comes with a cost. In the context of integer programming, we wish our constraint matrices to be \textit{totally unimodular}, as this allows us to relax our problem to linear programming while still obtaining an integer solution. Unfortunately, constraint \ref{con:Smtz3} does not have this property. Hence the benefit it gives by reducing the number of constraints is not ultimately helpful.
+	
+	\item The formulation as defined by Claus \cite{claus1984new}:
+	
+
+	This formulation has $n(m+1)$ variables, $nm$ inequality constraints and $r^2 + 4r+mn$ equality constraints. 
+\end{enumerate}
+
+
+
+
+
+
+
+
+Constraint \ref{con:S1} guarantees that the vehicle enters every node which is expecting a delivery. Similarly, constraint \ref{con:S2} requires that the vehicle leaves every such node.
+
+The dummy variables $s^i_e$ can be thought of as the flow from the depot to the node $i \in \mathcal{N}$ along the edge $e$. Unlike $\mathbf{x}$, $\mathbf{s}$ is not a binary variable, but rather a matrix of positive real numbers. The motivation behind these dummy variables is that a total flow of $1$ must originate from the depot to reach each of the delivery nodes (elements of the set $\mathcal{N}$). The entries of the matrix $\mathbf{s}$ keeps track of the route taken to each such node. We then view the variables $\mathbf{x}$ to be open channels that the flow may travel though.
+
+For this reason constraint \ref{con:S3} specifies that there can only be flow from the depot to node $l$ though the edge $e$ if the delivery can travels along $e$.
