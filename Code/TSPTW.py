@@ -15,7 +15,7 @@ import scipy.sparse as ss
 import sets
 
 
-toy_nnodes = 5;
+toy_nnodes = 20;
 
 hour = 60;
 
@@ -43,20 +43,20 @@ class TSPTW(object):
         
         self.nnodes = nnodes;
         self.TW = TimeWindows;
-        self.M = np.max(worst_case_travel_times-best_case_travel_times);
+        self.M = self.TW[0,1] - self.TW[0,0]
         
         self.edges = self.ImportantEdges()
         self.nedges = np.size(self.edges, 0)
         
         self.neqcons = 2*self.nnodes
-        self.nineqcons = self.nedges+ self.nnodes
+        self.nineqcons = 2*self.nedges
         
         self.nvars = self.nedges+2*self.nnodes
         #one variable for each meaningful edge, one for the arrival time at each node, and one to measure how early the van arrived at each node.
         
         self.travel_times = [best_case_travel_times[self.edges[i][0], self.edges[i][1]] for i in range(self.nedges)]
         
-        self.obj =[0]*self.nedges +[0]*self.nnodes+ [1]*(self.nnodes)
+        self.obj =[0]*self.nedges +[0]*self.nnodes+ [1]+[0]*(self.nnodes-1)
         
         print self.obj
         
@@ -169,37 +169,44 @@ class TSPTW(object):
         #Loop through the columns of the constraint matrix
         for i in range(self.nvars):
             if i < self.nedges:
-                A[i] = cplex.SparsePair(ind=[self.edges[i][0], self.edges[i][1]+self.nnodes, i+3*self.nnodes], val=[1,1,self.M])
+                A[i] = cplex.SparsePair(ind=[self.edges[i][0], self.edges[i][1]+self.nnodes, i+self.neqcons, i+self.neqcons+self.nedges], val=[1,1,self.M, self.M])
             if i >= self.nedges and i < self.nedges+self.nnodes:
                 
                 #a bunch of intermediate calculations
-                basicind = [i-self.nedges+2*self.nnodes]
-                basicval = [-1]
+                basicind = []
+                basicval = []
                 
-                tmp = self.outSet[i-self.nedges]
-                tmp2 = [self.indexMap( i-self.nedges,k) for k in tmp]
-                compind = [3*self.nnodes+ k for k in tmp2]
-                compval = [1]*len(compind);
-
+                tmp = self.inSet[i-self.nedges]
+                tmp2 = [self.indexMap(k, i-self.nedges) for k in tmp]
+                
+                tmp_size = len(tmp2)
+                
+                compind = [self.neqcons+ k for k in tmp2]+[self.neqcons+self.nedges+k for k in tmp2]
+                #compval = [1]*tmp_size +[-1]*tmp_size;
+                compval = [1 if i-self.nnodes else 0 for _ in tmp2]+[-1 if i-self.nnodes else 0 for _ in tmp2]
                 
                 A[i] = cplex.SparsePair(ind = basicind+compind , val = basicval+compval)
                 
             if i >= self.nedges+self.nnodes:
                 
-                basicind = [i-self.nedges+self.nnodes]
-                basicval = [-1]
+                basicind = []
+                basicval = []
                 
                 tmp = self.inSet[i-self.nedges-self.nnodes]
                 tmp2 = [self.indexMap(j, i-self.nedges-self.nnodes) for j in tmp]
                 
-                comp1ind = [3*self.nnodes+k for k in tmp2]
-                comp1val = [-1]*len(comp1ind)
+                tmp_size = len(tmp2)
+                
+                comp1ind = [self.neqcons+k for k in tmp2]+[self.neqcons+self.nedges+k for k in tmp2]
+                comp1val = [-1]*tmp_size+[1]*tmp_size
             
                 tmp = self.outSet[i-self.nedges-self.nnodes]
                 tmp2 = [self.indexMap(i-self.nedges-self.nnodes, j) for j in tmp]
                 
-                comp2ind = [3*self.nnodes+k for k in tmp2]
-                comp2val = [1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]
+                tmp_size = len(tmp2)
+                
+                comp2ind = [self.neqcons+k for k in tmp2]+[self.neqcons+self.nedges+k for k in tmp2]
+                comp2val = [1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]+[-1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]
                 
                 
                 print("FLAG")
@@ -214,13 +221,12 @@ class TSPTW(object):
     def ConstraintRHS(self):
         b = np.ones(self.neqcons + self.nineqcons)
         
-        
-        for i in range(self.neqcons, self.neqcons+self.nineqcons):
-            if i - self.neqcons < self.nnodes:
-                b[i] = -self.TW[i-self.neqcons, 0]
-            elif i>= self.nnodes+self.neqcons:
-                b[i] = self.M-self.travel_times[i-self.nnodes-self.neqcons]
-        
+        relax_scale = 1
+        for i in range(self.nineqcons):
+            if i < self.nedges:
+                b[self.neqcons +i] = (self.M-self.travel_times[i])*relax_scale
+            else:
+                b[self.neqcons +i] = (self.M+self.travel_times[i-self.nedges])*relax_scale
         con_type = "E"*self.neqcons + "L"*self.nineqcons
         
         return b, con_type
@@ -233,9 +239,9 @@ class TSPTW(object):
         self.names = ["e"+str(i) for i in range(self.nedges)]+ ["w"+str(i) for i in range(self.nnodes)] + ["T"+str(i) for i in range(self.nnodes)] 
         
         
-        my_ubs = [1 for _ in range(self.nedges)] +[self.TW[0,1]-self.TW[0,0] for _ in range(self.nnodes)]+[self.TW[i,1] for i in range(self.nnodes)]
+        my_ubs = [1 for _ in range(self.nedges)] +[self.TW[0,1]-self.TW[0,0] for _ in range(self.nnodes)]+[self.M for i in range(self.nnodes)]
         
-        my_lbs = [0 for _ in range(self.nvars)]
+        my_lbs = [0 for _ in range(self.nedges+self.nnodes)]+[self.TW[j,0] for j in range(self.nnodes)]
         
         my_types = [problem.variables.type.binary for _ in range(self.nedges)]+[problem.variables.type.continuous for _ in range(2*self.nnodes)]
         
@@ -245,17 +251,17 @@ class TSPTW(object):
         problem.linear_constraints.add( rhs = my_rhs, senses = con_type, names = my_con_names)
         
         
+        
         #All of the lower bounds take the default value of 0
+                
+        
         self.LHS = self.ConstraintLHS()
         
         print(self.obj)
         problem.variables.add(obj = self.obj, names = self.names, ub = my_ubs, lb = my_lbs, types = my_types, columns =  self.LHS)
+        problem.variables.set_upper_bounds('w0', 0)
         
         return problem
-        #Now fill in the rhs constraint vector
-        print(LHS)
-        
-        problem.variables.add(columns=LHS)
         
         
 
@@ -281,5 +287,6 @@ x = tmp.solution.get_values()
 
 for i in x: print i
 
+print('\n\n')
 
-
+print(toy.travel_times)
