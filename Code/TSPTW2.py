@@ -16,7 +16,7 @@ import scipy.sparse as ss
 import sets
 
 
-class TSPTW(object):
+class TSPTW2(object):
     def __init__(self, nnodes, TimeWindows,travel_times ):
         #nnodes should be an integer, equal to the number of customers, plus one more for the depot.
         #Timewindows should be a matrix with nnodes rows and 2 columns. For a given row, the two values in the matrix refer to the time after which the delivery may be made, and the time before which the delivery must be made.
@@ -26,10 +26,12 @@ class TSPTW(object):
         
         self.nnodes = nnodes;
         self.TW = TimeWindows;
-        self.M = self.TW[0,1] - self.TW[0,0]
         
-        self.edges = np.array([[i,j] for i in range(self.nnodes) for j in range(self.nnodes)])
-        self.nedges = self.nnodes*self.nnodes
+        self.M = 1.2*np.max(self.TW[:,0])
+        #self.M = self.TW[0,1] - self.TW[0,0]
+        
+        self.edges = np.array([[i,j] if i<j else [i+1,j] for i in range(self.nnodes-1) for j in range(self.nnodes)])
+        self.nedges = self.nnodes*(self.nnodes-1)
         
         self.neqcons = 2*self.nnodes
         self.nineqcons = 2*self.nedges
@@ -42,16 +44,18 @@ class TSPTW(object):
         self.obj =[0]*self.nedges +[0]*self.nnodes+ [1]+[0]*(self.nnodes-1)
         
         
-        self.inSet = [[i for i in range(self.nnodes) if i!=j ] for j in range(self.nnodes)]
+        self.inSet = [[i if i<j else i+1 for i in range(self.nnodes-1)] for j in range(self.nnodes)]
         self.outSet = [[i  for i in range(self.nnodes) if i!=j] for j in range(self.nnodes)]
         
             
         
-        print self.obj
         
         
     def indexMap(self, i,j):
-        return self.nnodes*i + j
+        if i >=j:
+            return self.nnodes*(i-1)+j
+        else:
+            return self.nnodes*i +j
     
     def ConstraintLHS(self):
         A = np.empty(self.nvars, dtype=cplex.SparsePair)
@@ -99,10 +103,6 @@ class TSPTW(object):
                 comp2val = [1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]+[-1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]
                 
                 
-                print("FLAG")
-                print(len(comp2ind))
-                print(len(comp2val))
-                print(comp2val)
                 
                 A[i] = cplex.SparsePair(ind = basicind+comp1ind+comp2ind, val = basicval+comp1val+comp2val)
                 
@@ -121,7 +121,7 @@ class TSPTW(object):
         
         return b, con_type
     
-    def solve(self):
+    def formulate(self):
         problem = cplex.Cplex();
         
         problem.objective.set_sense(problem.objective.sense.minimize)
@@ -129,7 +129,7 @@ class TSPTW(object):
         self.names = ["e"+str(i) for i in range(self.nedges)]+ ["w"+str(i) for i in range(self.nnodes)] + ["T"+str(i) for i in range(self.nnodes)] 
         
         
-        my_ubs = [1 for _ in range(self.nedges)] +[self.TW[0,1]-self.TW[0,0] for _ in range(self.nnodes)]+[self.M for i in range(self.nnodes)]
+        my_ubs = [1 for _ in range(self.nedges)] +[self.M for _ in range(self.nnodes)]+[self.TW[i,1] for i in range(self.nnodes)]
         
         my_lbs = [0 for _ in range(self.nedges+self.nnodes)]+[self.TW[j,0] for j in range(self.nnodes)]
         
@@ -147,16 +147,67 @@ class TSPTW(object):
         
         self.LHS = self.ConstraintLHS()
         
-        print(self.obj)
+        
         problem.variables.add(obj = self.obj, names = self.names, ub = my_ubs, lb = my_lbs, types = my_types, columns =  self.LHS)
         problem.variables.set_upper_bounds('w0', 0)
         
         return problem
     
+
+'''
+
+#%%
     
+    
+method = TSPTW2(toy_nnodes, toy_TimeWindows, toy_travel_times_min)
+
+formulation2 =method.formulate()
+formulation2.write('form2.lp')    
+
+formulation2.solve()
     
 #%%
+
+for i in range(len(method.edges)):
+    print(method.indexMap(method.edges[i,0], method.edges[i,1]))
+
+
+
+#%%
         
+toy_nnodes = 8;
+
+hour = 60;
+
+toy_customer_bounds = np.random.uniform(low=0,high=8*hour, size=toy_nnodes-1)
+
+toy_TimeWindows = np.empty([toy_nnodes, 2])
+toy_TimeWindows[0] = np.array([0, 8.5*hour])
+toy_TimeWindows[1:,0] = toy_customer_bounds;
+toy_TimeWindows[1:, 1] = toy_customer_bounds+hour;
+
+toy_travel_times_min = np.array([[100000 if i==j else np.random.uniform(low = 5, high = hour) for i in range(toy_nnodes) ]for j in range(toy_nnodes)])
+
+toy_travel_times_max = np.array([[toy_travel_times_min[i,j] + np.random.gamma(shape = hour/4, scale = np.random.uniform(low=0.5, high =2 )) if i != j else 0 for i in range(toy_nnodes)] for j in range(toy_nnodes) ]) 
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+#%%    
+    
     
 
 toy_nnodes = 20;
@@ -203,7 +254,7 @@ print(toy.travel_times)
 
 
 
-
+'''
 
 
 

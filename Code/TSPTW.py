@@ -15,26 +15,11 @@ import scipy.sparse as ss
 import sets
 
 
-toy_nnodes = 20;
-
-hour = 60;
-
-toy_customer_bounds = np.random.uniform(low=0,high=8*hour, size=toy_nnodes-1)
-
-toy_TimeWindows = np.empty([toy_nnodes, 2])
-toy_TimeWindows[0] = np.array([0, 8.5*hour])
-toy_TimeWindows[1:,0] = toy_customer_bounds;
-toy_TimeWindows[1:, 1] = toy_customer_bounds+hour;
-
-toy_travel_times_min = np.array([[0 if i==j else np.random.uniform(low = 5, high = hour) for i in range(toy_nnodes) ]for j in range(toy_nnodes)])
-
-toy_travel_times_max = np.array([[toy_travel_times_min[i,j] + np.random.gamma(shape = hour/4, scale = np.random.uniform(low=0.5, high =2 )) if i != j else 0 for i in range(toy_nnodes)] for j in range(toy_nnodes) ])
-
 
 #%%
 
 class TSPTW(object):
-    def __init__(self, nnodes, TimeWindows, best_case_travel_times, worst_case_travel_times ):
+    def __init__(self, nnodes, TimeWindows,travel_times):
         #nnodes should be an integer, equal to the number of customers, plus one more for the depot.
         #Timewindows should be a matrix with nnodes rows and 2 columns. For a given row, the two values in the matrix refer to the time after which the delivery may be made, and the time before which the delivery must be made.
         
@@ -43,7 +28,9 @@ class TSPTW(object):
         
         self.nnodes = nnodes;
         self.TW = TimeWindows;
-        self.M = self.TW[0,1] - self.TW[0,0]
+        
+        self.M = 1.2*np.max(self.TW[:,0])
+        #self.M = self.TW[0,1] - self.TW[0,0]
         
         self.edges = self.ImportantEdges()
         self.nedges = np.size(self.edges, 0)
@@ -54,11 +41,11 @@ class TSPTW(object):
         self.nvars = self.nedges+2*self.nnodes
         #one variable for each meaningful edge, one for the arrival time at each node, and one to measure how early the van arrived at each node.
         
-        self.travel_times = [best_case_travel_times[self.edges[i][0], self.edges[i][1]] for i in range(self.nedges)]
+        self.travel_times = [travel_times[self.edges[i][0], self.edges[i][1]] for i in range(self.nedges)]
         
         self.obj =[0]*self.nedges +[0]*self.nnodes+ [1]+[0]*(self.nnodes-1)
         
-        print self.obj
+        #print self.obj
         
     
     def ImportantEdges(self):
@@ -136,8 +123,8 @@ class TSPTW(object):
        
        
        
-       print('\n\n')
-       for i in Ordering: print(i)
+       #print('\n\n')
+       #for i in Ordering: print(i)
        
        
        count = 0;
@@ -156,7 +143,7 @@ class TSPTW(object):
                self.outSet[i].append(j)
                ij_to_e[i,j] = count
                    
-       print(count)
+       #print(count)
        self.ij_to_e = ss.csc_matrix(ij_to_e, dtype=int)
        return edges
    
@@ -209,10 +196,10 @@ class TSPTW(object):
                 comp2val = [1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]+[-1 if i-self.nedges-self.nnodes else 0 for _ in tmp2]
                 
                 
-                print("FLAG")
-                print(len(comp2ind))
-                print(len(comp2val))
-                print(comp2val)
+                #print("FLAG")
+                #print(len(comp2ind))
+                #print(len(comp2val))
+                #print(comp2val)
                 
                 A[i] = cplex.SparsePair(ind = basicind+comp1ind+comp2ind, val = basicval+comp1val+comp2val)
                 
@@ -231,7 +218,7 @@ class TSPTW(object):
         
         return b, con_type
     
-    def solve(self):
+    def formulate(self):
         problem = cplex.Cplex();
         
         problem.objective.set_sense(problem.objective.sense.minimize)
@@ -239,7 +226,7 @@ class TSPTW(object):
         self.names = ["e"+str(i) for i in range(self.nedges)]+ ["w"+str(i) for i in range(self.nnodes)] + ["T"+str(i) for i in range(self.nnodes)] 
         
         
-        my_ubs = [1 for _ in range(self.nedges)] +[self.TW[0,1]-self.TW[0,0] for _ in range(self.nnodes)]+[self.M for i in range(self.nnodes)]
+        my_ubs = [1 for _ in range(self.nedges)] +[self.M for _ in range(self.nnodes)]+[self.TW[i,1] for i in range(self.nnodes)]
         
         my_lbs = [0 for _ in range(self.nedges+self.nnodes)]+[self.TW[j,0] for j in range(self.nnodes)]
         
@@ -257,14 +244,31 @@ class TSPTW(object):
         
         self.LHS = self.ConstraintLHS()
         
-        print(self.obj)
+        #print(self.obj)
         problem.variables.add(obj = self.obj, names = self.names, ub = my_ubs, lb = my_lbs, types = my_types, columns =  self.LHS)
         problem.variables.set_upper_bounds('w0', 0)
         
         return problem
         
         
+#%%
+        
+'''
+toy_nnodes = 5;
 
+hour = 60;
+
+toy_customer_bounds = np.random.uniform(low=0,high=8*hour, size=toy_nnodes-1)
+
+toy_TimeWindows = np.empty([toy_nnodes, 2])
+toy_TimeWindows[0] = np.array([0, 8.5*hour])
+toy_TimeWindows[1:,0] = toy_customer_bounds;
+toy_TimeWindows[1:, 1] = toy_customer_bounds+hour;
+
+toy_travel_times_min = np.array([[0 if i==j else np.random.uniform(low = 5, high = hour) for i in range(toy_nnodes) ]for j in range(toy_nnodes)])
+
+toy_travel_times_max = np.array([[toy_travel_times_min[i,j] + np.random.gamma(shape = hour/4, scale = np.random.uniform(low=0.5, high =2 )) if i != j else 0 for i in range(toy_nnodes)] for j in range(toy_nnodes) ])
+    
 
 #%%
        
@@ -290,3 +294,4 @@ for i in x: print i
 print('\n\n')
 
 print(toy.travel_times)
+'''
