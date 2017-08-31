@@ -32,7 +32,7 @@ class TSPTW(object):
         self.M = 1.2*np.max(self.TW[:,0])
         #self.M = self.TW[0,1] - self.TW[0,0]
         
-        self.edges = self.ImportantEdges()
+        self.edges = self.ImportantEdges(travel_times)
         self.nedges = np.size(self.edges, 0)
         
         self.neqcons = 2*self.nnodes
@@ -41,14 +41,14 @@ class TSPTW(object):
         self.nvars = self.nedges+2*self.nnodes
         #one variable for each meaningful edge, one for the arrival time at each node, and one to measure how early the van arrived at each node.
         
-        self.travel_times = [travel_times[self.edges[i][0], self.edges[i][1]] for i in range(self.nedges)]
+        self.travel_times_refined = [travel_times[self.edges[i][0], self.edges[i][1]] for i in range(self.nedges)]
         
         self.obj =[0]*self.nedges +[0]*self.nnodes+ [1]+[0]*(self.nnodes-1)
         
         #print self.obj
         
     
-    def ImportantEdges(self):
+    def ImportantEdges(self, travel_times):
        #This function takes the complete graph with 'nnodes' nodes, and refines it to the important edges. For example if TW[i,2]<TW[j,1], then the edge from j to i is redundant and can be ignored.
        edges = []
        
@@ -70,9 +70,9 @@ class TSPTW(object):
            for other in range(self.nnodes):
                if(node!=other):
                    if other !=0:
-                       if self.TW[node, 0] > self.TW[other,1]:
+                       if self.TW[node, 0]+ travel_times[node, other]> self.TW[other,1]:
                            Ordering[node][0].add(other)
-                       elif self.TW[other,0] > self.TW[node,1]:
+                       elif self.TW[other,0]+travel_times[other,node] > self.TW[node,1]:
                            Ordering[node][2].add(other)
                        else:
                            Ordering[node][1].add(other)
@@ -211,9 +211,9 @@ class TSPTW(object):
         relax_scale = 1
         for i in range(self.nineqcons):
             if i < self.nedges:
-                b[self.neqcons +i] = (self.M-self.travel_times[i])*relax_scale
+                b[self.neqcons +i] = (self.M-self.travel_times_refined[i])*relax_scale
             else:
-                b[self.neqcons +i] = (self.M+self.travel_times[i-self.nedges])*relax_scale
+                b[self.neqcons +i] = (self.M+self.travel_times_refined[i-self.nedges])*relax_scale
         con_type = "E"*self.neqcons + "L"*self.nineqcons
         
         return b, con_type

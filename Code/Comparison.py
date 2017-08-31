@@ -25,7 +25,7 @@ reload(TSPTW2)
 
 #%%
 
-toy_nnodes = 4;
+toy_nnodes = 10;
 
 hour = 60;
 
@@ -50,13 +50,19 @@ formulation2 =method2.formulate()
 formulation2.write('form2.lp')
 
 #%%
+tic = time.time();
 formulation1.solve()
+toc = time.time()
+t1 = toc-tic
+
 #%%
 tic = time.time()
-for i in range(1000):
-    formulation2.solve()
+formulation2.solve()
 toc = time.time()
-print(tic-toc)
+t2 = toc-tic
+
+
+print(t1, t2, t2/t1)
 #%%
 opt1 = formulation1.solution.get_objective_value()
 x1 = formulation1.solution.get_values()
