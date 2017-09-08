@@ -16,7 +16,7 @@ import scipy.sparse as ss
 
 #%%
 
-class LTDTSPSTW(object):
+class DTDTSPSTW(object):
     def __init__(self, nnodes, DeliveryWindows,travel_times, Time_Windows, service_time, penalty_params):
         #nnodes should be an integer, equal to the number of customers, plus one more for the depot.
         #Timewindows should be a matrix with nnodes rows and 2 columns. For a given row, the two values in the matrix refer to the time after which the delivery may be made, and the time before which the delivery must be made.
@@ -37,7 +37,7 @@ class LTDTSPSTW(object):
         self.DW = DeliveryWindows;
         
         #record the number of time windows which exist
-        self.K = np.size(Time_Windows) - 1       
+        self.K = np.size(Time_Windows)       
         
         #Record the times of the day when travel times change. That is, between self.TW[j] and self.TW[j+1] one framework applies. However, after self.TW[j], then the rules changes. Overall, travel times must be piecewise linear though, so things don't change too much.
         self.Theta = Time_Windows
@@ -70,8 +70,8 @@ class LTDTSPSTW(object):
         
         #one variable for each edges, one service time commencement variable for each node, one waiting time variable for each node, one regret variable for each node, one decision variable for each edge x travel time window indicating during which such window is that node departed from
         self.nvars = 2*self.m+2*self.n + self.kappa-1
-        self.neqcons = 3*self.n
-        self.nineqcons = self.m + self.K2 + 3*(self.n-1)
+        self.neqcons = 3*self.n + self.m
+        self.nineqcons = self.m + 3*(self.n-1)
 
         
         #one variable for each meaningful edge, one for the arrival time at each node, and one to measure how early the van arrived at each node.
@@ -246,14 +246,8 @@ class LTDTSPSTW(object):
     
     def ConstraintLHS(self):
         A = np.empty(self.nvars, dtype=cplex.SparsePair)
-        
-        D = [[(self.tt[e,kk+1] - self.tt[e,kk])/(self.Theta[kk+1]-self.Theta[kk])  for kk in range(self.K)]for e in range(self.m)]
-        #print('This is D')
-        #print(D)
-        
-        #print(self.combos)
-        #print("Beginning loop")
-        #Loop through the columns of the constraint matrix
+
+
         for i in range(self.nvars):
             
             #first deal with the edge variables
@@ -266,11 +260,8 @@ class LTDTSPSTW(object):
             #next deal with the travel time variables
             elif i < 2*self.m:
                 
-                ii = self.edges[i-self.m][0]
-                jj = self.edges[i-self.m][1]
-                
-                inds = [self.neqcons+i-self.m]+[self.neqcons+self.m + self.indexSlotMap(ii,jj,kk) for kk in self.departureSlots[ii]]
-                vals = [-1]+[1 for _ in range(len(inds)-1)]
+                inds = [3*self.n + i-self.m]+[self.neqcons+i-self.m]
+                vals = [1]+[-1]
                 
                 #print(ii,jj,self.departureSlots[ii], inds)
                 
@@ -283,19 +274,14 @@ class LTDTSPSTW(object):
                 chii = self.slots[i-base][0]
                 chik = self.slots[i-base][1]
                 
-                #print(i-base, chii, chik)
                 ind1 = [chii+2*self.n]
                 val1 = [1 ]
                 
-                #ee = [self.indexMap(chii, j) for j in self.outSet[chii]]
-                #print(i-base, self.slots[i-base], self.outSet[chii], chii, chik,[[chii,jj, chik] for jj in self.outSet[chii]])
-                           
-                
-                ind2 = [self.neqcons + self.m + self.indexSlotMap(chii, jj, chik) for jj in self.outSet[chii]]
-                val2 = [-self.M for _ in ind2]
+                ind2 = [3*self.n + self.indexMap(chii, jj) for jj in self.outSet[chii]]
+                val2 = [-self.tt[self.indexMap(chii,jj), chik] for jj in self.outSet[chii]]
                 
                 if chii:
-                    ind3 = [chii+self.neqcons+self.m +self.K2-1, chii+self.neqcons+self.m +self.K2+self.n-2]
+                    ind3 = [chii+self.neqcons+self.m -1, chii+self.neqcons+self.m +self.n-2]
                     val3 = [-self.Theta[chik+1], -self.Theta[chik]]
                 else:
                     ind3 = []
@@ -314,20 +300,12 @@ class LTDTSPSTW(object):
                 val1 = [1 for _ in ind1]
                 ind2 = [self.neqcons+self.indexMap(ii,jj) for jj in self.outSet[ii]]
                 val2 = [-1 if ii else 0 for _ in ind2]
-                
-                #ee = [self.indexMap(ii,jj) for jj in self.outSet[ii]]
-                
-                
-                
-                ind3 = [self.neqcons+self.m+ self.indexSlotMap(ii,jj,kk) for kk in self.departureSlots[ii] for jj in self.outSet[ii]]
-                edges = [self.indexMap(ii,jj)  for jj in self.outSet[ii]]
-                val3 = [-D[ee][ kk] if ii else 0 for kk in self.departureSlots[ii] for ee in edges]
-                
+
                 if ii:
-                    ind4 = [ii +self.neqcons+self.m+self.K2 -1 , ii +self.neqcons+self.m+self.K2+self.n-2]
+                    ind4 = [ii +self.neqcons+self.m -1 , ii +self.neqcons+self.m+self.n-2]
                     val4 = [1 for _ in ind4]
                     
-                    ind5 = [ii+self.neqcons+self.m + self.K2 + 2*self.n-3]
+                    ind5 = [ii+self.neqcons+self.m  + 2*self.n-3]
                     val5 = [1]
                 else:
                     ind4 = []
@@ -336,49 +314,34 @@ class LTDTSPSTW(object):
                     ind5 = []
                     val5 = []
                 
-                
-                #ind5 = [ii+self.neqcons+self.m + self.K2 + 2*self.n-2]
-                #val5 = [1]
-                
-                A[i] = cplex.SparsePair(ind = ind1+ind2+ind3+ind4+ind5, val = val1+val2+val3+val4+val5)
+                A[i] = cplex.SparsePair(ind = ind1+ind2+ind4+ind5, val = val1+val2+val4+val5)
                 
             elif i<2*self.m + self.kappa +2*self.n-1:
                 base = 2*self.m + self.kappa + self.n
 
-                A[i] = cplex.SparsePair(ind=[i-base+self.neqcons + self.m+self.K2 + 2*self.n-2], val = [-1])
+                A[i] = cplex.SparsePair(ind=[i-base+self.neqcons + self.m+ 2*(self.n-1)], val = [-1])
             #print(A[i])     
         return A;
     
     def ConstraintRHS(self):
         #the rhs for all equality bounds is 1
         b = np.ones(self.neqcons + self.nineqcons)
+        b[3*self.n: self.neqcons] = np.zeros(self.m)
         
         for i in range(self.nineqcons):
             if i < self.m:
                 #First the 'big M' constraint which relates T_i to T_j           
                 b[self.neqcons +i] = (-self.M + self.service_time)
-            elif i<self.K2+self.m:
-                #Next the 'big M' constraint which determine travel time, with respect to time of day. There are K*m of these constraints, one for each edge per time window. We order these constraints such that constraint e*K + k refers to edge: 'e' and time windows 'k'.
-                ee = self.indexMap(self.combos[i-self.m][0], self.combos[i-self.m][1])
-                kk = self.combos[i-self.m][2]
-                
-                
-                dddth = (self.tt[ee, kk+1]-self.tt[ee,kk])/(self.Theta[kk+1]-self.Theta[kk])
-                tmp = self.tt[ee,kk] + dddth * (self.service_time - self.Theta[kk]) - self.M
-                
-                #print(self.edges[ee], kk, self.tt[ee,kk], tmp, dddth)
-                
-                b[self.neqcons +i] = tmp
             
-            elif i <self.K2+self.m + 2*self.n-2:
+            elif i <self.m + 2*(self.n-1):
                 #rhs for constraints which determine the chi variable, that is during which time slot the node i is departed from.
                 b[self.neqcons+i] = -self.service_time
-            elif i <self.K2+self.m + 3*(self.n-1):
+            elif i <self.m + 3*(self.n-1):
                 #Finally we determine lateness
-                b[self.neqcons+i] = self.DW[i-(self.K2+ self.m + 2*(self.n-1))+1, 1]
+                b[self.neqcons+i] = self.DW[i-(self.m + 2*(self.n-1))+1, 1]
         
         
-        con_type = "E"*self.neqcons + "G"*(self.m+self.K2) + "L"*(self.n-1) + "G"*(self.n-1) + "L" *(self.n-1)
+        con_type = "E"*self.neqcons + "G"*(self.m) + "L"*(self.n-1) + "G"*(self.n-1) + "L" *(self.n-1)
 
         return b, con_type
     
@@ -423,7 +386,7 @@ class LTDTSPSTW(object):
      
     def summary(self):
         p = self.formulate();
-        p.write('linear_problem.lp')
+        p.write('discrete_problem.lp')
         
         p.solve();
         
@@ -456,13 +419,13 @@ class LTDTSPSTW(object):
 
 
 
-'''
 
+'''
 
 #%%
 servicetime = 5    
 toy_nnodes = 20;
-ntw = 4;
+ntw = 20;
 
 hour = 60;
 
