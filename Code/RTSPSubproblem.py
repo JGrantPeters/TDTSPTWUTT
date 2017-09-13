@@ -69,9 +69,7 @@ class RTSPSubproblem(object):
         timeobj[self.end] = 1
         
         self.obj =[0]*(2*self.m+self.kappa)+timeobj +[self.alpha]
-        
-        
-        #elf.ConstraintLHS()
+
     
     def indexSlotMap(self, i,j,k):
         return self.ijk_to_ind[k][i,j]-1
@@ -101,9 +99,6 @@ class RTSPSubproblem(object):
     def ImportantDepartureSlots(self):
         possibilities = [[] for i in range(self.n)]
         
-
-        #possibilities[0]=[0]
-        
         for i in range(0,self.n):
             if i!= self.end:
                 arr = [j for j in self.DW[i, 0]-self.Theta ]
@@ -120,7 +115,6 @@ class RTSPSubproblem(object):
         for i in range(self.n):
             for j in possibilities[i]:
                 self.slots.append([i,j])
-        #self.slots = [[i,j] for j in possibilities[i] for i in range(self.nnodes)]
         
         slotInv = np.zeros([self.n, self.K])
         count = 1;
@@ -209,7 +203,6 @@ class RTSPSubproblem(object):
                self.outSet[i].append(j)
                ij_to_e[i,j] = count
                    
-       #print(count)
        self.ij_to_e = ss.csc_matrix(ij_to_e, dtype=int)
        return edges
    
@@ -218,11 +211,7 @@ class RTSPSubproblem(object):
         A = np.empty(self.nvars, dtype=cplex.SparsePair)
         
         D = [[(self.tt[e,kk+1] - self.tt[e,kk])/(self.Theta[kk+1]-self.Theta[kk])  for kk in range(self.K)]for e in range(self.m)]
-        #print('This is D')
-        #print(D)
-        
-        #print(self.combos)
-        #print("Beginning loop")
+
         #Loop through the columns of the constraint matrix
         for i in range(self.nvars):
             
@@ -238,14 +227,11 @@ class RTSPSubproblem(object):
             
             #next deal with the travel time variables
             elif i < 2*self.m:
-                
                 ii = self.edges[i-self.m][0]
                 jj = self.edges[i-self.m][1]
                 
                 inds = [self.neqcons+i-self.m]+[self.neqcons+self.m + self.indexSlotMap(ii,jj,kk) for kk in self.departureSlots[ii]]
                 vals = [-1]+[1 for _ in range(len(inds)-1)]
-                
-                #print(ii,jj,self.departureSlots[ii], inds)
                 
                 A[i] = cplex.SparsePair(ind = inds, val = vals)
                 
@@ -253,28 +239,11 @@ class RTSPSubproblem(object):
             elif i <2*self.m +self.kappa:
                 #the ik coordinates of this chi variable are:
                 base = 2*self.m
-                
-                    
                 chii = self.slots[i-base][0]
-
-                
                 chik = self.slots[i-base][1]
                 
                 ind1 = [(chii if chii < self.end else chii-1) + 2*(self.n-1)]
                 val1 = [1]
-                '''
-                if chii != self.end:
-                #print(i-base, chii, chik)
-                    ind1 = [(chii if chii<self.end else chii-1)+2*(self.n-1)]
-                    val1 = [1 ]
-                    print(ind1)
-                else:
-                    ind1 = []
-                    val1 = []
-                '''
-                #ee = [self.indexMap(chii, j) for j in self.outSet[chii]]
-                #print(i-base, self.slots[i-base], self.outSet[chii], chii, chik,[[chii,jj, chik] for jj in self.outSet[chii]])
-                           
                 
                 ind2 = [self.neqcons + self.m + self.indexSlotMap(chii, jj, chik) for jj in self.outSet[chii]]
                 val2 = [-self.M for _ in ind2]
@@ -285,11 +254,7 @@ class RTSPSubproblem(object):
                 else:
                     ind3 = []
                     val3 = []
-                
-                '''
-                ind3 = [chii+self.neqcons+self.m +self.K2, chii+self.neqcons+self.m +self.K2+self.n]
-                val3 = [-self.Theta[chik+1], -self.Theta[chik]]
-                '''
+
                 vals = val1+val2+val3
                 inds = ind1+ind2+ind3
                 
@@ -299,18 +264,12 @@ class RTSPSubproblem(object):
             elif i <2*self.m + self.kappa + self.n:
                 base = 2*self.m + self.kappa
                 ii = i-base
-                #ii = self.edges[i-base][0]
-                #jj = self.edges[i-base][1]
                 
                 ind1 = [self.neqcons+ self.indexMap(jj, ii) for jj in self.inSet[ii]]
                 val1 = [1 for _ in ind1]
                 ind2 = [self.neqcons+self.indexMap(ii,jj) for jj in self.outSet[ii]]
                 val2 = [-1 if ii else 0 for _ in ind2]
-                
-                #ee = [self.indexMap(ii,jj) for jj in self.outSet[ii]]
-                
-                
-                
+                                
                 ind3 = [self.neqcons+self.m+ self.indexSlotMap(ii,jj,kk) for kk in self.departureSlots[ii] for jj in self.outSet[ii]]
                 edges = [self.indexMap(ii,jj)  for jj in self.outSet[ii]]
                 val3 = [-D[ee][ kk] if ii else 0 for kk in self.departureSlots[ii] for ee in edges]
@@ -330,26 +289,7 @@ class RTSPSubproblem(object):
                 else:
                     ind5 = []
                     val5 = []
-                
-                
-                
-                '''
-                if ii:
-                    ind4 = [ii +self.neqcons+self.m+self.K2 -1 , ii +self.neqcons+self.m+self.K2+self.n-2]
-                    val4 = [1 for _ in ind4]
-                    
-                    ind5 = [ii+self.neqcons+self.m + self.K2 + 2*self.n-3]
-                    val5 = [1]
-                else:
-                    ind4 = []
-                    val4 = []
-                    
-                    ind5 = []
-                    val5 = []
-                '''
-                
-                #ind5 = [ii+self.neqcons+self.m + self.K2 + 2*self.n-2]
-                #val5 = [1]
+
                 
                 A[i] = cplex.SparsePair(ind = ind1+ind2+ind3+ind4+ind5, val = val1+val2+val3+val4+val5)
                 
@@ -360,7 +300,6 @@ class RTSPSubproblem(object):
                 vals = [-1 for _ in inds]
                 
                 A[i] = cplex.SparsePair(ind = inds, val = vals)
-            #print(A[i])     
         return A;
     
     def ConstraintRHS(self):
@@ -376,11 +315,8 @@ class RTSPSubproblem(object):
                 ee = self.indexMap(self.combos[i-self.m][0], self.combos[i-self.m][1])
                 kk = self.combos[i-self.m][2]
                 
-                
                 dddth = (self.tt[ee, kk+1]-self.tt[ee,kk])/(self.Theta[kk+1]-self.Theta[kk])
                 tmp = self.tt[ee,kk] + dddth * (self.service_time - self.Theta[kk]) - self.M
-                
-                #print(self.edges[ee], kk, self.tt[ee,kk], tmp, dddth)
                 
                 b[self.neqcons +i] = tmp
             
@@ -417,7 +353,7 @@ class RTSPSubproblem(object):
 
 
         my_con_names = ["c"+str(i) for i in range(self.neqcons + self.nineqcons)]
-        problem.linear_constraints.add( rhs = self.ConstraintRHS, senses = con_type, names = my_con_names)
+        problem.linear_constraints.add( rhs = self.ConstraintRHS(), senses = con_type, names = my_con_names)
         
         
         
@@ -428,7 +364,7 @@ class RTSPSubproblem(object):
         
         
         #print(self.obj)
-        problem.variables.add(obj = self.obj, names = self.names, ub = my_ubs, lb = my_lbs, types = my_types, columns =  self.ConstraintLHS())
+        problem.variables.add(obj = self.obj, names = names, ub = my_ubs, lb = my_lbs, types = my_types, columns =  self.ConstraintLHS())
         #, columns =  self.LHS
         
         
