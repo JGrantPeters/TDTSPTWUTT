@@ -12,8 +12,8 @@
 \usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage[margin=1.05in]{geometry}
-\usepackage{algorithm}
-\usepackage{algorithmic}
+%\usepackage{algorithm}
+%\usepackage{algorithmic}
 \usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black,anchorcolor=black]{hyperref} % Colour links. [OPTIONAL]
 \usepackage[numbers, sort&compress]{natbib} % Nice references.
 \usepackage{babel}
@@ -28,13 +28,38 @@
 \usepackage{refcount}
 \usepackage{xparse}
 \usepackage{mathabx}
+\usepackage{tcolorbox}
 
+\DeclareMathOperator{\E}{E}
+\DeclareMathOperator{\T}{T}
+\DeclareMathOperator{\Cov}{COV}
+\DeclareMathOperator{\Diag}{Diag}
+\DeclareMathOperator{\I}{I}
+\DeclareMathOperator{\diff}{d}
+\DeclareMathOperator{\Prob}{P}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\Bigo}{O}
+\DeclareMathOperator{\Normal}{N}
+\DeclareMathOperator{\cst}{const}
+\DeclareMathOperator{\Local}{L}
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Bin}[2]{\begin{pmatrix}#1\\#2\end{pmatrix}}
+\newcommand{\MBD}[1]{\textcolor{blue}{{(\textbf{MBD}: #1)}}}
 
  
 \sidecaptionvpos{figure}{c}
 
+\tcbuselibrary{theorems}
 
-
+\newtcbtheorem[]{lemma}{Lemma}%
+{colback=green!5,colframe=green!35!black,fonttitle=\bfseries}{th}
+\newtcbtheorem[]{algorithm}{Algorithm}%
+{colback=blue!5,colframe=blue!35!black,fonttitle=\bfseries}{th}
+\newtcbtheorem[]{remark}{Remark}%
+{colback=green!5,colframe=green!35!black,fonttitle=\bfseries}{th}
 
 \usepackage[margin=10pt,font=small,labelfont=bf,labelsep=endash,figurewithin=section,tablewithin=section]{caption}
 % Caption figures and tables nicely. %% After cleveref.
@@ -54,7 +79,7 @@
 
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[section]
-\newtheorem*{remark}{Remark}
+%\newtheorem*{remark}{Remark}
 \newtheorem{conjecture}{Conjecture}
 
 \newtheorem{theorem}{Theorem}
