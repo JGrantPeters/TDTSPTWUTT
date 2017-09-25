@@ -80,7 +80,8 @@ def Subproblem(tt, service_time, inds):
 def Measure(route, tt, service_time):
     arrival_times = np.empty([len(route)]); 
     for i in range((len(route)-1)):
-        arrival_times[route[i+1]] = arrival_times[route[i]] + service_time + tt[route[i],route[i+1]]
+        #print(arrival_times[i], service_time, tt[i,i+1])
+        arrival_times[i+1] = arrival_times[i] + service_time + tt[i,i+1]
     return arrival_times
 #%%
 
@@ -105,19 +106,22 @@ class DRTSP(object):
         self.service_time  =5
         #self.nCT = len(self.CT) 
         #self.n = np.size(self.tt, 0)
-        self.ncategories = np.max(Hours)+1
-        self.categories = self.getCategories(Hours)
-        
+        self.K = np.max(Hours)+1
+        self.N = self.getCategories(Hours)
+        self.Lambda = np.array([60*i for i in range(self.K)])
+
+        self.buildScenarios()
         #self.cSizes = [len()]
         
         
     def getCategories(self, Hours):
-        categories = [[i for i in self.indCustomers if Hours[i] == j] for j in range(self.ncategories)]
-        return categories
+        N = [[i for i in self.indCustomers if Hours[i] == j] for j in range(self.K)]
+        return N
     
     def buildScenarios(self):
-        self.nSC = int(sp.misc.comb(self.ncategories+1, 2)) + 1
-        self.SC = np.zeros([self.nSC, self.ncategories], dtype = int)
+        self.nSC = int(sp.misc.comb(self.K+1, 2)) + 1
+        print(self.nSC)
+        self.SC = np.zeros([self.nSC, self.K], dtype = int)
         self.SC[0,:] = np.array([0,0,0,0])
         self.SC[1,:] = np.array([0,0,0,1])
         self.SC[2,:] = np.array([0,0,1,1])
@@ -148,158 +152,288 @@ class DRTSP(object):
         
         #self.SCTree = ScenarioTree(range(self.nSC), [i for i in range(self.nSC) if self.SC[i,0]], [i for i in range(self.nSC) if not self.SC[i,0]])
         
-            
-    def solveSubproblems(self):
-        #print(self.utt)
-        category_size = len(self.categories[0])
-        self.StartProblems = np.empty([category_size,3], dtype = SubSolution)
-        for s in range(self.nsc):
-            for i in range(category_size):
-                inds = [self.indDepot] + [self.categories[0][i]]
-                #print(inds)
-                subutt = np.array([[self.utt[k,j,s] for k in inds] for j in inds])
-                #print(subutt)
-                self.StartProblems[i,s]= Subproblem(subutt, self.service_time, inds)
-                
-        category_size = len(self.categories[-1])
-        self.EndProblems = np.empty([category_size, 3], dtype = SubSolution)
-        for s in range(self.nsc):
-            for i in range(category_size):
-                #print(self.categories[-1], self.indDepot)
-                inds = [self.categories[-1][i]] + [j for j in self.categories[-1] if j!= self.categories[-1][i]]+[self.indDepot]
-                #print(inds)
-                subutt = np.array([[self.utt[k,j,s] for k in inds] for j in inds])
-                self.EndProblems[i,s]= Subproblem(subutt, self.service_time, inds)
+        
+    
+    def solvePrecient(self, s, param = 0):
+        #Store regret values here
+        regret = np.zeros([self.n])
+        
+        #treat the first iteration separately
+        k = self.K-1
+        j0 = self.indDepot
+        for i0 in self.N[k]:
+            Set = np.array([i for i in self.N[k] if i != i0])
 
-        self.MiddleProblems = [[[[None  for s in range(self.nsc)] for end in self.categories[i+1]]for start in self.categories[i]] for i in range(self.ncategories-1)]
-        
-        for stage in range(self.ncategories-1):
-            
-            for start in range(len(self.categories[stage])):
-                for end in range(len(self.categories[stage+1])):
-                    #print(self.categories[stage][start], self.categories[stage+1][end])
-                    inds = [self.categories[stage][start]] + [j for j in self.categories[stage] if j!= self.categories[stage][start]]+[self.categories[stage+1][end]]
-                    #print(inds)
-                    for s in range(self.nsc):
-                        subutt = np.array([[self.utt[k,j,s] for k in inds] for j in inds])
-                        tmp = Subproblem(subutt, self.service_time, inds)
-                        self.MiddleProblems[stage][start][end][s] = tmp
-                        #print(tmp.route, self.categories[stage+1][start], self.categories[stage+2][end])
-                        
-    def OptimizeRoute(self):
-        a = np.zeros([self.n, self.nSC])
-        atilde = np.zeros([self.n, self.n, self.nSC])
-        
-        
-        for s in range(self.nSC):
-            for i in self.EndProblems:
-                #print(self.SC[s,-1], i[self.SC[s, -1]].route)
-                a[i[self.SC[s,-1]].route[0], s] = i[self.SC[s,-1]].phi
-        
+            min_regret = np.inf;
+            for sigma in itertools.permutations(Set):
+                route = [i0]+[i for i in sigma]+[j0];
+                tt = np.array([[utt[ii,jj,s[k]] for ii in route] for jj in route])
                 
-        for s in range(self.nSC):
-            for stage in range(self.ncategories-2,-1, -1):
-                for i in self.MiddleProblems[stage]:
-                    smallest = np.inf
+                arrivals = Measure(route, tt, self.service_time)
+                aj0 = arrivals[-1]
+                aim = arrivals[-2]
+                
+                local_regret = np.maximum(aim , np.max(aj0 - 60,0) + param)
+                if local_regret < min_regret:
+                    min_regret = local_regret
+            regret[i0] = min_regret
+            
+        #Now iterate through the main body
+        for k in range(self.K-2, -1,-1):
+            for i0 in self.N[k]:
+                min_regret = np.inf
+                for j0 in self.N[k+1]:
+                    Set = np.array([i for i in self.N[k] if i != i0])
                     
-                    for j in i:
-                        start = j[self.SC[s,stage]].route[0]
-                        end = j[self.SC[s,stage]].route[-1]
-                        #print(start, end)
-                        tmp = np.maximum(j[self.SC[s,stage]].phi, a[end, s] + np.maximum(0, -j[self.SC[s,stage]].w))
-                        atilde[start, end, s] = tmp
-                        if tmp<smallest:
-                            smallest = tmp
-                    a[i[0][self.SC[s,stage]].route[0], s ] =smallest 
+                    best_route_regret = np.inf
+                    for sigma in itertools.permutations(Set):
+                        route = [i0]+[i for i in sigma]+[j0];
+                        tt = np.array([[utt[ii,jj,s[k]] for ii in route] for jj in route])
+                        
+                        arrivals = Measure(route, tt, self.service_time)
+                        aj0 = arrivals[-1]
+                        aim = arrivals[-2]
+                        local_regret = np.maximum(aim , np.max(aj0 - 60,0) + regret[j0])
+                        
+                        #print(aim, aj0, local_regret, regret[j0],i0, j0)
+                        if local_regret < best_route_regret:
+                            best_route_regret = local_regret
+                    
+                    if best_route_regret < min_regret:
+                        min_regret = best_route_regret;
+                
+                regret[i0] = min_regret
+                    
+        #Now for the final iteration
+        min_regret = np.inf
+        i0=  self.indDepot
+        for j0 in self.N[0]:
+            Set = np.array([i for i in self.N[k] if i != i0])
+                    
+            best_route_regret = np.inf
+            for sigma in itertools.permutations(Set):
+                route = [i0]+[i for i in sigma]+[j0];
+                tt = np.array([[utt[ii,jj,s[k]] for ii in route] for jj in route])
+                
+                arrivals = Measure(route, tt, self.service_time)
+                aj0 = arrivals[-1]
+                aim = arrivals[-2]
+                local_regret = np.maximum(aim , np.max(aj0 - 60,0) + regret[j0])
+                
+                #print(aim, aj0, local_regret, regret[j0],i0, j0)
+                if local_regret < best_route_regret:
+                    best_route_regret = local_regret
+            if best_route_regret < min_regret:
+                min_regret = best_route_regret;
         
-        smallest = np.inf
-        start = self.indDepot
+        regret[i0] = min_regret
+        
+        route = np.zeros([self.K+1])
+        route[0] = self.indDepot
+        
+        for k in range(self.K):
+            minReg = np.inf;
+            for j in self.N[k]:
+                if regret[j] < minReg:
+                    minReg = regret[j]
+                    jstar = j
+            
+            route[k+1] = jstar
+        
+        return regret[i0], route
+    
+    
+    def solve(self):
+        param = 30
+        
+        #precient regret
+        #tmp = np.array([[self.solvePrecient(s, param)] for s in self.SC])
+        
+        #pR = tmp[:,0]
+        #pRoute = tmp[:,1]
+        
+        
+        pR = np.zeros([self.nSC])
+        pRoute = np.zeros([self.nSC, self.K+1])
         for s in range(self.nSC):
-            for j in self.StartProblems:
-                smallest = np.inf
-                end = j[0].route[-1]
-                #print(a[end,s])
-                tmp = np.maximum(j[0].phi, a[end, s] + np.maximum(0, -j[0].w))
-                atilde[start, end, s] = tmp
-                if tmp<smallest :
-                    smallest = tmp
-            a[self.indDepot, s] = smallest
+            pR[s], pRoute[s,:] = self.solvePrecient(self.SC[s],param)
+        
+        
+        print(pRoute)
+        print(pR)
+        
+        
+        self.alpha = np.zeros([self.n, self.n, self.nSC])
+        self.Beta = np.array([[np.inf for _ in range(self.nSC)] for _ in range(self.n)])
+        
+        #print(pR)
+        
+        #treat the first iteration separately
+        k = self.K-1
+        j0 = self.indDepot
+        for Branch in self.tree[k]:
+            for i0 in self.N[k]:
+
+                Set = np.array([i for i in self.N[k] if i != i0])
+    
+                min_regret = np.inf;
+                for sigma in itertools.permutations(Set):
+                    
+                    robustness = 0
+                    for s in Branch:
+                        sk = self.SC[s,k]
+                        route = [i0]+[i for i in sigma]+[j0];
+                        #print('FLAG')
+                        #print(route)
+                        #print(np.shape(self.utt))
+                        #print(s, k,sk)
+                        tt = np.array([[utt[ii,jj,sk] for ii in route] for jj in route])
+                        #print(tt)
+                        arrivals = Measure(route, tt, self.service_time)
+                        aj0 = arrivals[-1]
+                        aim = arrivals[-2]
+                        
+                        local_regret = np.maximum(aim , np.max(aj0 - 60,0) + param)
+                        
+                        if local_regret < self.Beta[i0, s]:
+                            self.Beta[i0, s] = local_regret
+                        
+                        
+                        local_robustness = local_regret/pR[s]
+                        
+                        if robustness<local_robustness:
+                            robustness = local_robustness;
+                        
+                    if robustness < min_regret:
+                        min_regret = robustness
+                
+                for s in Branch:
+                    self.alpha[i0, j0, s] = min_regret
+        
+        #for i in self.alpha:
+        #    print(i)
+        #print('\n\n')
+        #print(self.Beta)
+        
+        
+        for k in range(self.K-2, -1, -1):
+            for Branch in self.tree[k]:
+                for i0 in self.N[k]:
+                    for j0 in self.N[k+1]:
+                        Set = np.array([i for i in self.N[k] if i != i0])
+                        for sigma in itertools.permutations(Set):
+                            robustness = 0
+                            for s in Branch:
+                                sk = self.SC[s,k]
+                                route = [i0]+[i for i in sigma]+[j0];
+                                #print('FLAG')
+                                #print(route)
+                                #print(np.shape(self.utt))
+                                #print(s, k,sk)
+                                tt = np.array([[utt[ii,jj,sk] for ii in route] for jj in route])
+                                #print(tt)
+                                arrivals = Measure(route, tt, self.service_time)
+                                aj0 = arrivals[-1]
+                                aim = arrivals[-2]
+                                
+                                local_regret = np.maximum(aim , np.max(aj0 - 60,0) + self.Beta[j0,s])
+                                
+                                if local_regret < self.Beta[i0, s]:
+                                    self.Beta[i0, s] = local_regret
+                                
+                                
+                                local_robustness = local_regret/pR[s]
+                                
+                                if robustness<local_robustness:
+                                    robustness = local_robustness;
+                                
+                            if robustness < min_regret:
+                                min_regret = robustness
+                        for s in Branch:
+                            self.alpha[i0, j0, s] = min_regret
+        
+        
+        i0 = self.indDepot
+        for j0 in self.N[0]:
             
+            robustness = 0;
+            for s in range(self.nSC):
+                sk = 0;
+                route = [i0]+[j0]
+                tt = np.array([[utt[ii,jj,sk] for ii in route] for jj in route])
+                arrivals = Measure(route, tt, self.service_time)
+                aj0 = arrivals[-1]
+                aim = arrivals[-2]
+                local_regret =  aj0+ self.Beta[j0,s]
+                if local_regret < self.Beta[i0, s]:
+                    self.Beta[i0, s] = local_regret
+                    
+                local_robustness = local_regret/pR[s]
+                
+                if robustness<local_robustness:
+                    robustness = local_robustness;
+                
+            for s in range(self.nSC):
+                self.alpha[i0, j0, s] = robustness
+
+
         
         
+        #for i in self.alpha:
+        #    print(i)
+        #print('\n\n')
+        #print(self.Beta)
         
         
-        Delta = np.array([0.0 for _ in range(self.nSC)])
-        Precient_arrivals = np.zeros([self.n, self.nSC])
-        Precient_routes = [None for _ in self.SC]
-        Precient_regret = np.zeros([self.n, self.nSC])
+        route = np.zeros([self.K+1, self.nSC], dtype=int)
+        for i in range(self.nSC):
+            route[0,i] = self.indDepot
+        
+        minAlpha = np.inf
+        for j in self.N[0]:
+            tmp = self.alpha[self.indDepot, j, 0]
+            if tmp < minAlpha:
+                minAlpha = tmp
+                jstar = j
+        
         for s in range(self.nSC):
-            istar = np.argmin([a[i,s] for i in self.categories[0]])
+            route[1, s] = jstar
             
-            Precient_arrivals[self.categories[0][istar], s] = self.StartProblems[istar][self.SC[s,stage]].rel_arrival[-1]
-            Precient_regret[self.categories[0][istar],s] = self.StartProblems[istar][self.SC[s,stage]].rel_arrival[-1]
+        #print(route)
             
-            Precient_routes[s] = self.StartProblems[istar, 0].route
-            for stage in range(self.ncategories-1):
-                jstar = np.argmin([atilde[self.categories[-1][istar], jj, s] for jj in self.categories[stage]])
+        
+        for k in range(0,self.K):
+            #print(route[k-1,:])
+            
+            #print(istar)
+            for Branch in self.tree[k-1]:
+                istar = route[k,self.tree[k][0][0]]   
                 
-                tmp = self.MiddleProblems[stage][istar][jstar][self.SC[s, stage]]
-                for jj in range(len(tmp.route[1:])):
-                    Precient_arrivals[tmp.route[jj+1], s] = tmp.rel_arrival[jj+1] + Delta[s]+stage*60
-                    Precient_regret[tmp.route[jj+1],s] = tmp.rel_arrival[jj+1] + Delta[s]
-                
-                
-                Precient_routes[s] = Precient_routes[s] + self.MiddleProblems[stage][istar][jstar][self.SC[s, stage]].route[1:]
-                Delta[s] += np.maximum(0, -self.MiddleProblems[stage][istar][jstar][self.SC[s,stage]].w)
-                #print(self.MiddleProblems[stage][istar][jstar][self.SC[s,stage]].w)
-                #print(Delta)
-                istar = jstar
-            Precient_routes[s] = Precient_routes[s]+self.EndProblems[istar, self.SC[s,-1]].route[1:]
-            Delta[s] += np.maximum(0, -self.EndProblems[istar][self.SC[s,-1]].w)
+                #print(self.N[k-1])
+                tmp = np.array([self.alpha[istar, jj, Branch[0]] for jj in self.N[k]])
+                jstar = np.argmin(tmp)
+                #print(istar, [self.alpha[istar, i, Branch[0]] for i in self.N[k-1]])
+                #print(istar,self.N[k])
+                #print(tmp)
+                for s in Branch:
+                    route[k+1, s] = self.N[k][jstar]
+                    
+        print(route)
         
-        
-        Precient = np.array([i+60 for i in Delta])
-        
-        #Now we have our precient solutions, and need to find the robust solution;
-        
-        recoursePath = np.zeros([self.nSC, self.ncategories])
-        #print(self.nSC, self.ncategories)
-        #print(np.shape(self.tree))
-        istar = np.argmin([np.min([a[i,s]/Precient[s] for s in range(self.nSC)]) for i in self.categories[0]])
-        #print(istar)
-        recoursePath[:,0] = [istar for _ in self.SC]
-        
-        for stage in range(0, self.ncategories):
-            for branch in range(self.nbranches[stage]):
-                scens = [i for i in range(self.nSC) if self.tree[i,stage] ==branch] 
-                istar = recoursePath[scens[0], stage-1]
-                
-                #print(scens)
-                
-                jstar = np.argmin([float(atilde[self.categories[stage][istar],jj,s])/Precient[s] for s in scens] for jj in self.categories[stage])
-                #print(jstar, 'flag')
-                recoursePath[scens, stage] = [self.categories[stage][jstar] for _ in scens]
-                
-        
-        print(Precient_arrivals)
-        print('\n')
-        print(Precient_regret)
-        
-        print(Delta)
-        for i in Precient_routes:
-            print(i)
-        print(recoursePath)
-        '''
-        return route, Delta
-        '''
+
 #%%
 example = DRTSP(codes, hours, day,utt)
 
 #%%
-example.solveSubproblems()
-example.buildScenarios()
-tmp = example.OptimizeRoute()
-print(example.categories)
+#example.solveSubproblems()
+#example.buildScenarios()
+#tmp = example.OptimizeRoute()
+#example.solve()
+#for i in example.SC:
+#    example.solvePrecient(i)
+
+example.solve()
+print(example.N)
 
     
 #%%
