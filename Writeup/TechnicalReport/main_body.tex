@@ -381,26 +381,29 @@ Note that within algorithm \ref{alg:DetDynamic}, we never actually set up and so
 
 The question now is, how many computations are required for this? If we have $K = 4$ such that $|\mathcal{M}_k| = 4$ for $k = 1, 2, 3, 4$, then we have only 3 pairs of adjacent sets, there are only six possibilities for the ordering of nodes in each subproblem. Hence we must make: $6( 2\times 4 + 3\times4^2 ) = 336$ calculations for $a_{i_m}$ and $\varphi_{i_0, j_0, \sigma}$, which are the calculations we must make most often. In practice, this is a trivial task for a computer.
 
-\begin{algorithm}{Solve the Deterministic Problem}{}
-	\label{alg:DetDynamic}
-	\begin{itemize}
-		\item[] initialisation: $\varphi_n = const$
-		\item[] for $k=K, K-1, \ldots, 1:$
-		\item[] \quad in parallel, for all $i_0\in{\mathcal N}_k$
-		\item[] \quad\quad in parallel, for all $j_0\in{\mathcal N}$
-		\item[] \quad\quad\quad in parallel, for all $\sigma\in\pi(\mathcal{N}_k \setminus\{i_0\})$ of ${\mathcal N}_k\setminus\{i_0\}$
-		\item[] \quad\quad\quad\quad $a_{i_m}=\Lambda_{k-1}+\sum_{p=0}^{m-1}\left(s_{i_p}+t_{i_{p},i_{p+1}}\right)$
-		\item[] \quad\quad\quad\quad $\varphi_{i_0,j_0,\sigma}=\max(a_{i_m}-\Lambda_{k-1}, \max(a_{j_0} - \Lambda_k,0) + \varphi_{j_0})$
-		\item[] \quad\quad\quad end
-		\item[] \quad\quad\quad save $\sigma^*_{i_0,j_0}=\arg\min_{\sigma}\varphi_{i_0,j_0,\sigma}$
-		\item[] \quad\quad\quad save $\varphi_{i_0,j_0}=\varphi_{i_0,j_0,\sigma^*}$
-		\item[] \quad\quad end
-		\item[] \quad save $j^* = \arg\min_{j_0} \varphi_{i_0,j_0}$
-		\item[] \quad save $\varphi_{i_0} = \varphi_{i_0, j^*}$
-		\item[] \quad end
-		\item[] end
-	\end{itemize}
+\begin{algorithm} % enter the algorithm environment
+	\caption{Solve the Deterministic Problem}
+	\label{alg:DetDynamic} % and a label for \ref{} commands later in the document
+	\begin{algorithmic} % enter the algorithmic environment
+		\STATE initialisation: $\varphi_n = const$
+		\FOR{$k = K, K-1, \ldots, 1$} 
+			\FOR{$i_0 \in \mathcal{N}_k$}
+				\FOR{$J_0 \in \mathcal{N}_{k+1}$}
+					\FOR{$\sigma \in \pi(\mathcal{N}_k \setminus \{i_0\})$}
+						\STATE $a_{i_m}=\Lambda_{k-1}+\sum_{p=0}^{m-1}\left(s_{i_p}+t_{i_{p},i_{p+1}}\right)$
+						\STATE 
+						$\varphi_{i_0,j_0,\sigma}=\max(a_{i_m}-\Lambda_{k-1}, \max(a_{j_0} - \Lambda_k,0) + \varphi_{j_0})$
+					\ENDFOR
+					\STATE  $\sigma^*_{i_0,j_0}=\arg\min_{\sigma}\varphi_{i_0,j_0,\sigma}$
+					\STATE $\varphi_{i_0,j_0}=\varphi_{i_0,j_0,\sigma^*}$
+				\ENDFOR
+				\STATE $j^* = \arg\min_{j_0} \varphi_{i_0,j_0}$
+				\STATE $\varphi_{i_0} = \varphi_{i_0, j^*}$
+			\ENDFOR
+		\ENDFOR			
+	\end{algorithmic}
 \end{algorithm}
+
 
 \subsection{Larger Delivery Windows}
 \label{sec:quick_fix}
@@ -463,12 +466,6 @@ Rob(f) := \arg\min\limits_x \left(\frac{f(x,S)}{\max \limits_S f(a,S)} \right)
 
 The advantage this approach offers is that in circumstances where $f$ may vary greatly with $S$, the definition in equation \ref{eq:robust_deviation} would give preference to those scenarios. In contrast, the definition in equation \ref{eq:my_robust_function} scales out this effect.
 
-\begin{figure}[h!]
-	\centering
-	\includegraphics[scale = 0.8]{DynamicProgrammingExample.png}
-	\caption{blah blah blah}
-	\label{fig:dynam_ex2}
-\end{figure}
 
 
 \subsection{The Dynamic Programming Solution}
@@ -500,43 +497,46 @@ We solve the backwards stage of the robust problem using algorithm \ref{alg:robu
 \ref{alg:forward_robust_solution}.
 
 What this procedure gives us is the length $n+1$ vector $\mathbf{R}$. The value of $R_{k+1}$ is the node in $\mathcal{M}_k$ which we should go to first. If we record the values of $\sigma$ from algorithm \ref{alg:robust_solution}, then combined with $\mathbf{R}$ we have the precise optimally robust route that should be taken.
-\begin{algorithm}{Solve the Robust Problem}{}
-	\label{alg:robust_solution}
-	\begin{itemize}
-		\item[] initialisation: $\varphi_n = const$
-		\item[] for $k=K, K-1, \ldots, 1:$
-		\item[] \quad in parallel, for all $i_0\in{\mathcal N}_k$
-		\item[] \quad\quad in parallel, for all $j_0\in{\mathcal N}$
-		\item[] \quad\quad\quad in parallel, for all $\sigma\in\pi(\mathcal{N}_k \setminus\{i_0\})$ of ${\mathcal N}_k\setminus\{i_0\}$
-		\item[] \quad\quad\quad\quad in parallel for $s \in $ Scenarios
-		\item[] \quad\quad\quad\quad\quad $a_{i_m}=\Lambda_{k-1}+\sum_{p=0}^{m-1}\left(s_{i_p}+t^{s_k}_{i_{p},i_{p+1}}\right)$
-		\item[] \quad\quad\quad\quad\quad $\varphi_{i_0,j_0,\sigma, s}=\max(a_{i_m}-\Lambda_{k-1}, \max(a_{j_0} - \Lambda_k,0) + \varphi_{j_0, s})$
-		\item[] \quad\quad\quad\quad\quad
-		$\alpha_{i_0,j_0,\sigma,s } = \varphi_{i_0,j_0,\sigma, s}/\phi_s$
-		\item[] \quad\quad\quad\quad end
-		\item[] \quad\quad\quad\quad save $\alpha_{i_0, j_0, \sigma} = \max_s \alpha_{i_0, j_0, \sigma, s}$
-		\item[] \quad\quad\quad end
-		\item[] \quad\quad\quad save $ \alpha_{i_0,j_0}=\min_{\sigma}\alpha_{i_0,j_0, \sigma}$
-		\item[] \quad\quad end
-		\item[] \quad\quad for all $s \in $ Scenarios
-		\item[] \quad\quad\quad save $\varphi_{i_0, s} = \min_{j_0, s} \varphi_{i_0, j_0, \sigma, s}$	
-		\item[] \quad\quad end
-		\item[] \quad end
-		\item[] end
-	\end{itemize}
+
+\begin{algorithm} % enter the algorithm environment
+	\caption{Solve the Robust Problem}
+	\label{alg:robust_solution} % and a label for \ref{} commands later in the document
+	\begin{algorithmic} % enter the algorithmic environment
+		\STATE initialisation: $\varphi_{n, s} = const$ for $s \in $ Scenarios
+		\FOR{$k = K, K-1, \ldots, 1$} 
+		\FOR{$i_0 \in \mathcal{N}_k$}
+		\FOR{$J_0 \in \mathcal{N}_{k+1}$}
+		\FOR{$\sigma \in \pi(\mathcal{N}_k \setminus \{i_0\})$}
+		\FOR{$s \in $ Scenarios}
+		\STATE $a_{i_m}=\Lambda_{k-1}+\sum_{p=0}^{m-1}\left(s_{i_p}+t^{s_k}_{i_{p},i_{p+1}}\right)$
+		\STATE 
+		$\varphi_{i_0,j_0,\sigma}=\max(a_{i_m}-\Lambda_{k-1}, \max(a_{j_0} - \Lambda_k,0) + \varphi_{j_0, s})$
+		\STATE $\alpha_{i_0,j_0,\sigma,s } = \varphi_{i_0,j_0,\sigma, s}/\phi_s$
+		\ENDFOR
+		\STATE $\alpha_{i_0, j_0, \sigma} = \max_s \alpha_{i_0, j_0, \sigma, s}$
+		\ENDFOR
+		\STATE $ \alpha_{i_0,j_0}=\min_{\sigma}\alpha_{i_0,j_0, \sigma}$
+		\ENDFOR
+		\FOR{$s \in $ Scenarios}
+			\STATE $\varphi_{i_0, s} = \min_{j_0, \sigma}\varphi_{i_0,j_0,\sigma, s }$
+		\ENDFOR
+		\ENDFOR
+		\ENDFOR			
+	\end{algorithmic}
+\end{algorithm}
+\begin{algorithm} % enter the algorithm environment
+	\caption{Construct the Robust Route}
+	\label{alg:forward_robust_solution} % and a label for \ref{} commands later in the document
+	\begin{algorithmic} % enter the algorithmic environment
+		\STATE $R_0 = n$
+		\FOR{$k = 1,2,\ldots, K$}
+			\STATE $j^* = \arg\min_{j_0}\alpha_{R_{k-1}, j_0} $
+			\STATE $R_{k} = j^*$
+		\ENDFOR
+		\STATE $R_{K+1} = n$
+	\end{algorithmic}
 \end{algorithm}
 
-\begin{algorithm}{Construct the Robust Route}{}
-	\label{alg:forward_robust_solution}
-	\begin{itemize}
-		\item[] initialisation: $R_0 = n$
-		\item[] for $k=1, 2, \ldots, K:$
-		\item[] \quad save $j^* = \arg\min_{j_0}\alpha_{R_{k-1}, j_0} $
-		\item[] \quad save $R_{k} = j^*$.
-		\item[] end
-		\item[] save $R_{K+1} = n$
-	\end{itemize}
-\end{algorithm}
 
 \subsection{Recourse Solution}
 
@@ -562,50 +562,49 @@ Finally, we write the tree $\mathbf{T}$ of scenarios such that $T_k$ is a list o
 
 With this notation defined, we now solve the problem using algorithm \ref{alg:robust_recourse_solution}, and reconstruct the tree solution using algorithm \ref{alg:forward_robust_recourse_solution}. 
 
-\begin{algorithm}{Solve the Robust Problem}{}
-	\label{alg:robust_recourse_solution}
-	\begin{itemize}
-		\item[] initialisation: $\varphi_n = const$
-		\item[] for $k=K, K-1, \ldots, 1:$
-		\item[] \quad for $\mathbf{B} \in T_k$
-		\item[] \quad\quad in parallel, for all $i_0\in{\mathcal N}_k$
-		\item[] \quad\quad\quad in parallel, for all $j_0\in{\mathcal N}$
-		\item[] \quad\quad\quad\quad in parallel, for all $\sigma\in\pi(\mathcal{N}_k \setminus\{i_0\})$ of ${\mathcal N}_k\setminus\{i_0\}$
-		\item[] \quad\quad\quad\quad\quad in parallel for $s \in \mathbf{B}$
-		\item[] \quad\quad\quad\quad\quad\quad $a_{i_m}=\Lambda_{k-1}+\sum_{p=0}^{m-1}\left(s_{i_p}+t^{s_k}_{i_{p},i_{p+1}}\right)$
-		\item[] \quad\quad\quad\quad\quad\quad $\varphi_{i_0,j_0,\sigma, s}=\max(a_{i_m}-\Lambda_{k-1}, \max(a_{j_0} - \Lambda_k,0) + \varphi_{j_0, s})$
-		\item[] \quad\quad\quad\quad\quad\quad
-		$\alpha_{i_0,j_0,\sigma,s } = \varphi_{i_0,j_0,\sigma, s}/\phi_s$
-		\item[] \quad\quad\quad\quad\quad end
-		\item[] \quad\quad\quad\quad\quad save $\alpha_{i_0, j_0, \sigma} = \max_s \alpha_{i_0, j_0, \sigma, s}$
-		\item[] \quad\quad\quad\quad end
-		\item[] \quad\quad\quad\quad save $ \alpha_{i_0,j_0}=\min_{\sigma}\alpha_{i_0,j_0, \sigma}$
-		\item[] \quad\quad\quad end
-		\item[] \quad\quad\quad for all $s \in \mathbf{B}$
-		\item[] \quad\quad\quad\quad save $\varphi_{i_0, s} = \min_{j_0, s} \varphi_{i_0, j_0, \sigma, s}$	
-		\item[] \quad\quad\quad end
-		\item[] \quad\quad end
-		\item[] \quad end
-		\item[] end
-	\end{itemize}
+\begin{algorithm} % enter the algorithm environment
+	\caption{Solve the Robust Problem with Recourse}
+	\label{alg:robust_recourse_solution} % and a label for \ref{} commands later in the document
+	\begin{algorithmic} % enter the algorithmic environment
+		\STATE initialisation: $\varphi_{n, s} = const$ for $s \in $ Scenarios
+		\FOR{$k = K, K-1, \ldots, 1$} 
+		\FOR{$\mathbf{B} \in T_k$}
+		\FOR{$i_0 \in \mathcal{N}_k$}
+		\FOR{$J_0 \in \mathcal{N}_{k+1}$}
+		\FOR{$\sigma \in \pi(\mathcal{N}_k \setminus \{i_0\})$}
+		\FOR{$s \in \mathbf{B}$}
+		\STATE $a_{i_m}=\Lambda_{k-1}+\sum_{p=0}^{m-1}\left(s_{i_p}+t^{s_k}_{i_{p},i_{p+1}}\right)$
+		\STATE 
+		$\varphi_{i_0,j_0,\sigma}=\max(a_{i_m}-\Lambda_{k-1}, \max(a_{j_0} - \Lambda_k,0) + \varphi_{j_0, s})$
+		\STATE $\alpha_{i_0,j_0,\sigma,s } = \varphi_{i_0,j_0,\sigma, s}/\phi_s$
+		\ENDFOR
+		\STATE $\alpha_{i_0, j_0, \sigma} = \max_s \alpha_{i_0, j_0, \sigma, s}$
+		\ENDFOR
+		\STATE $ \alpha_{i_0,j_0}=\min_{\sigma}\alpha_{i_0,j_0, \sigma}$
+		\ENDFOR
+		\FOR{$s \in \mathbf{B}$}
+		\STATE $\varphi_{i_0, s} = \min_{j_0, \sigma}\varphi_{i_0,j_0,\sigma, s }$
+		\ENDFOR
+		\ENDFOR
+		\ENDFOR
+		\ENDFOR			
+	\end{algorithmic}
 \end{algorithm}
 
-\begin{algorithm}{Construct the Robust Route}{}
-	\label{alg:forward_robust_recourse_solution}
-	\begin{itemize}
-		\item[] initialisation: $R_{0,s} = n$ for $s$ in Scenarios
-		\item[] for $k=1, 2, \ldots, K:$
-		\item[] \quad for $\mathbf{B} \in T_k$
-		\item[] \quad \quad for $s \in \mathbf{B}$
-		\item[] \quad\quad\quad save $j^* = \arg\min_{j_0}\alpha_{R_{k-1, s}, j_0} $
-		\item[] \quad\quad\quad save $R_{k,s} = j^*$.
-		\item[] \quad\quad end
-		\item[] \quad end
-		\item[] end
-		\item[] save $R_{K+1, s} = n$ for $s$ in Scenarios
-	\end{itemize}
+\begin{algorithm} % enter the algorithm environment
+	\caption{Construct the Robust Problem with Recourse}
+	\label{alg:forward_robust_recourse_solution} % and a label for \ref{} commands later in the document
+	\begin{algorithmic} % enter the algorithmic environment
+		\STATE initialisation: $R_{0,s} = n$ for $s$ in Scenarios
+		\FOR{$k = 1,2,\ldots, K$}
+		\FOR{$\mathbf{B} \in T_k$}
+		\STATE $j^* = \arg\min_{j_0}\alpha_{R_{k-1, s}, j_0} $
+		\STATE $R_{k,s} = j^*$
+		\ENDFOR
+		\ENDFOR
+		\STATE $R_{K+1, s} = n$ for $s$ in Scenarios
+	\end{algorithmic}
 \end{algorithm}
-
 
 \section{Conclusions and Future Work}
 We have derived the algorithms in sections \ref{sec:deterministic_dynamic} and
