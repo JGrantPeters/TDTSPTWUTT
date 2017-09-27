@@ -78,7 +78,7 @@ def Subproblem(tt, service_time, inds):
     
     
 def Measure(route, tt, service_time):
-    arrival_times = np.empty([len(route)]); 
+    arrival_times = np.zeros([len(route)]); 
     for i in range((len(route)-1)):
         #print(arrival_times[i], service_time, tt[i,i+1])
         arrival_times[i+1] = arrival_times[i] + service_time + tt[i,i+1]
@@ -120,19 +120,19 @@ class DRTSP(object):
     
     def buildScenarios(self):
         self.nSC = int(sp.misc.comb(self.K+1, 2)) + 1
-        print(self.nSC)
+        #print(self.nSC)
         self.SC = np.zeros([self.nSC, self.K], dtype = int)
-        self.SC[0,:] = np.array([0,0,0,0])
-        self.SC[1,:] = np.array([0,0,0,1])
-        self.SC[2,:] = np.array([0,0,1,1])
-        self.SC[3,:] = np.array([0,0,1,2])
-        self.SC[4,:] = np.array([0,1,1,1])
+        self.SC[0,:] = np.array([1,2,2,2])
+        self.SC[1,:] = np.array([1,1,2,2])
+        self.SC[2,:] = np.array([1,1,1,2])
+        self.SC[3,:] = np.array([1,1,1,1])
+        self.SC[4,:] = np.array([0,1,2,2])
         self.SC[5,:] = np.array([0,1,1,2])
-        self.SC[6,:] = np.array([0,1,2,2])
-        self.SC[7,:] = np.array([1,1,1,1])
-        self.SC[8,:] = np.array([1,1,1,2])
-        self.SC[9,:] = np.array([1,1,2,2])
-        self.SC[10,:] = np.array([1,2,2,2])
+        self.SC[6,:] = np.array([0,1,1,1])
+        self.SC[7,:] = np.array([0,0,1,2])
+        self.SC[8,:] = np.array([0,0,1,1])
+        self.SC[9,:] = np.array([0,0,0,1])
+        self.SC[10,:] = np.array([0,0,0,0])
         
         
         self.tree = [[[i for i in range(11)]], 
@@ -157,6 +157,8 @@ class DRTSP(object):
     def solvePrecient(self, s, param = 0):
         #Store regret values here
         regret = np.zeros([self.n])
+        routes = [ None for _ in range(self.n)]
+        mymap = np.zeros([self.n])
         
         #treat the first iteration separately
         k = self.K-1
@@ -173,18 +175,23 @@ class DRTSP(object):
                 aj0 = arrivals[-1]
                 aim = arrivals[-2]
                 
-                local_regret = np.maximum(aim , np.max(aj0 - 60,0) + param)
+                local_regret = np.maximum(aim , np.maximum(aj0 - 60,0) + param)
                 if local_regret < min_regret:
                     min_regret = local_regret
+                    min_sigma = sigma
+            #print(i0, min_regret, min_sigma)
+            routes[i0] = [i for i in min_sigma]+[self.indDepot]
             regret[i0] = min_regret
-            
+            mymap[i0] = j0
+        
+        #print(routes)
         #Now iterate through the main body
         for k in range(self.K-2, -1,-1):
             for i0 in self.N[k]:
                 min_regret = np.inf
                 for j0 in self.N[k+1]:
                     Set = np.array([i for i in self.N[k] if i != i0])
-                    
+                    #print(i0, j0, Set)
                     best_route_regret = np.inf
                     for sigma in itertools.permutations(Set):
                         route = [i0]+[i for i in sigma]+[j0];
@@ -193,54 +200,59 @@ class DRTSP(object):
                         arrivals = Measure(route, tt, self.service_time)
                         aj0 = arrivals[-1]
                         aim = arrivals[-2]
-                        local_regret = np.maximum(aim , np.max(aj0 - 60,0) + regret[j0])
+                        local_regret = np.maximum(aim , np.maximum(aj0 - 60,0) + regret[j0])
                         
                         #print(aim, aj0, local_regret, regret[j0],i0, j0)
                         if local_regret < best_route_regret:
                             best_route_regret = local_regret
+                            min_sigma = sigma
                     
                     if best_route_regret < min_regret:
                         min_regret = best_route_regret;
+                        jstar = j0
+                        sigma_j = min_sigma
                 
+                #print('FLAG', i0, sigma_j, jstar)
+                routes[i0] = [i for i in sigma_j]+[jstar]+routes[jstar]
                 regret[i0] = min_regret
-                    
+                mymap[i0] = jstar
+        
+        #print(routes)
+            
         #Now for the final iteration
         min_regret = np.inf
         i0=  self.indDepot
+        sigma_j = 0
+
+        #for i in self.N:
+        #    print(regret[i])
         for j0 in self.N[0]:
-            Set = np.array([i for i in self.N[k] if i != i0])
-                    
-            best_route_regret = np.inf
-            for sigma in itertools.permutations(Set):
-                route = [i0]+[i for i in sigma]+[j0];
-                tt = np.array([[utt[ii,jj,s[k]] for ii in route] for jj in route])
-                
-                arrivals = Measure(route, tt, self.service_time)
-                aj0 = arrivals[-1]
-                aim = arrivals[-2]
-                local_regret = np.maximum(aim , np.max(aj0 - 60,0) + regret[j0])
-                
-                #print(aim, aj0, local_regret, regret[j0],i0, j0)
-                if local_regret < best_route_regret:
-                    best_route_regret = local_regret
-            if best_route_regret < min_regret:
-                min_regret = best_route_regret;
-        
+            #print(j0, Set)
+            
+            #tt = np.array([[utt[ii,jj,s[k]] for ii in route] for jj in route])
+            
+            aim = self.service_time
+            aj0 = aim + utt[i0,j0,0]
+            local_regret = np.maximum(aim , np.maximum(aj0 - 60,0) + regret[j0])
+            #print(j0, local_regret, regret[j0])    
+            if local_regret < min_regret:
+                min_regret = local_regret;
+                jstar = j0
+                mymap[i0] = jstar
+        routes[i0] = [i0]+ [jstar]+routes[jstar]
         regret[i0] = min_regret
         
-        route = np.zeros([self.K+1])
+        #print(routes[i0])
+        
+        route = np.zeros([self.K+1], dtype = int)
         route[0] = self.indDepot
-        
         for k in range(self.K):
-            minReg = np.inf;
-            for j in self.N[k]:
-                if regret[j] < minReg:
-                    minReg = regret[j]
-                    jstar = j
-            
-            route[k+1] = jstar
+            route[k+1] = mymap[route[k]]
         
-        return regret[i0], route
+        #self.reg = regret
+        #self.path = routes
+        
+        return regret[i0], route, routes[self.indDepot]
     
     
     def solve(self):
@@ -256,8 +268,11 @@ class DRTSP(object):
         pR = np.zeros([self.nSC])
         pRoute = np.zeros([self.nSC, self.K+1])
         for s in range(self.nSC):
-            pR[s], pRoute[s,:] = self.solvePrecient(self.SC[s],param)
+            pR[s], pRoute[s,:], _ = self.solvePrecient(self.SC[s],param)
         
+        mymap = np.zeros([self.n, self.nSC])
+        routes = [ [None for _ in range(self.nSC)] for _ in range(self.n)]
+        regret = np.zeros([self.n, self.nSC])
         
         print(pRoute)
         print(pR)
@@ -267,33 +282,34 @@ class DRTSP(object):
         self.Beta = np.array([[np.inf for _ in range(self.nSC)] for _ in range(self.n)])
         
         #print(pR)
-        
         #treat the first iteration separately
         k = self.K-1
         j0 = self.indDepot
-        for Branch in self.tree[k]:
+        for Branch in self.tree[k+1]:
             for i0 in self.N[k]:
 
                 Set = np.array([i for i in self.N[k] if i != i0])
-    
+                
+                
+                
                 min_regret = np.inf;
-                for sigma in itertools.permutations(Set):
+                perms = itertools.permutations(Set)
+                
+                
+                for permIndex in range(len(perms)):
+                    sigma = perms[permIndex]
                     
                     robustness = 0
                     for s in Branch:
                         sk = self.SC[s,k]
                         route = [i0]+[i for i in sigma]+[j0];
-                        #print('FLAG')
-                        #print(route)
-                        #print(np.shape(self.utt))
-                        #print(s, k,sk)
+
                         tt = np.array([[utt[ii,jj,sk] for ii in route] for jj in route])
-                        #print(tt)
                         arrivals = Measure(route, tt, self.service_time)
                         aj0 = arrivals[-1]
                         aim = arrivals[-2]
                         
-                        local_regret = np.maximum(aim , np.max(aj0 - 60,0) + param)
+                        local_regret = np.maximum(aim , np.maximum(aj0 - 60,0) + param)
                         
                         if local_regret < self.Beta[i0, s]:
                             self.Beta[i0, s] = local_regret
@@ -303,18 +319,21 @@ class DRTSP(object):
                         
                         if robustness<local_robustness:
                             robustness = local_robustness;
+                            min_sigma = sigma
                         
                     if robustness < min_regret:
                         min_regret = robustness
+                        sigma_s = min_sigma
                 
                 for s in Branch:
+                    routes[i0][s] = sigma_s
                     self.alpha[i0, j0, s] = min_regret
-        
+                    mymap[i0,s] = j0
+                    regret[i0,s] 
         #for i in self.alpha:
         #    print(i)
         #print('\n\n')
         #print(self.Beta)
-        
         
         for k in range(self.K-2, -1, -1):
             for Branch in self.tree[k]:
@@ -336,7 +355,7 @@ class DRTSP(object):
                                 aj0 = arrivals[-1]
                                 aim = arrivals[-2]
                                 
-                                local_regret = np.maximum(aim , np.max(aj0 - 60,0) + self.Beta[j0,s])
+                                local_regret = np.maximum(aim , np.maximum(aj0 - 60,0) + self.Beta[j0,s])
                                 
                                 if local_regret < self.Beta[i0, s]:
                                     self.Beta[i0, s] = local_regret
@@ -351,20 +370,21 @@ class DRTSP(object):
                                 min_regret = robustness
                         for s in Branch:
                             self.alpha[i0, j0, s] = min_regret
-        
-        
+                            routes[i0][s] = sigma_s
+                            mymap[i0,s] = j0   
+                            
         i0 = self.indDepot
         for j0 in self.N[0]:
             
             robustness = 0;
             for s in range(self.nSC):
-                sk = 0;
-                route = [i0]+[j0]
-                tt = np.array([[utt[ii,jj,sk] for ii in route] for jj in route])
-                arrivals = Measure(route, tt, self.service_time)
-                aj0 = arrivals[-1]
-                aim = arrivals[-2]
-                local_regret =  aj0+ self.Beta[j0,s]
+                #sk = 0;
+                #route = [i0]+[j0]
+                #tt = np.array([[utt[ii,jj,sk] for ii in route] for jj in route])
+                #9arrivals = Measure(route, tt, self.service_time)
+                aim = self.service_time
+                aj0 = aim + utt[i0,j0,0]
+                local_regret =  np.maximum(aj0,0)+ self.Beta[j0,s]
                 if local_regret < self.Beta[i0, s]:
                     self.Beta[i0, s] = local_regret
                     
@@ -375,7 +395,10 @@ class DRTSP(object):
                 
             for s in range(self.nSC):
                 self.alpha[i0, j0, s] = robustness
+                mymap[i0,s] = j0
 
+        print(routes)
+        print(mymap)
 
         
         
@@ -422,7 +445,39 @@ class DRTSP(object):
         
 
 #%%
-example = DRTSP(codes, hours, day,utt)
+ex = DRTSP(codes, hours, day,utt)
+#s0 = ex.SC[0]
+#s4 = ex.SC[4]
+#s5 = ex.SC[5]
+#s10 = ex.SC[10]
+
+
+
+#for s in ex.SC:
+#    print(ex.solvePrecient(s))
+
+#a0 = ex.solvePrecient(s0)
+#a10 = ex.solvePrecient(s10)
+#a4 = ex.solvePrecient(s4)
+#a5 = ex.solvePrecient(s5)
+
+
+ex.solve()
+#print(a4, s4)
+#print(a5, s5)
+#print(a0)
+#print(a10)
+
+
+
+
+#%%
+for i in ex.N[0]:
+    print(ex.path[i], ex.reg[i])
+
+print(ex.path[ex.indDepot])
+print('\n\n')
+print(ex.N)
 
 #%%
 #example.solveSubproblems()
@@ -437,6 +492,42 @@ print(example.N)
 
     
 #%%
+data = pd.read_csv('randomOxDeliveries.csv')
+postcodes = np.unique(data['postcode'].values)
+
+nnodes = 17
+#inds = np.random.choice(len(postcodes), nnodes)
+codes = postcodes[inds]
+
+
+
+nbins = 4;
+
+day = datetime.datetime(2017, 9, 29)
+hours = np.zeros([nnodes], dtype = int)
+inds = np.random.permutation(nnodes)
+
+for i in range(1,nnodes):
+    hours[inds[i]] = int((i-1)/(nnodes/nbins))
+hours[inds[0]]= -1
+    
+
+#tt = dat_misc.build_tt_matrix(codes, [(i if i>-1 else 0) for i in hours], day)
+#tt2 = np.array([[tt[i,j]*np.random.uniform(1,2) if np.random.randint(0,2) else tt[i,j] for j in range(nnodes)] for i in range(nnodes)])
+#tt3 = np.array([[tt2[i,j]*np.random.uniform(1,2) if np.random.randint(0,2) else tt2[i,j] for j in range(nnodes)] for i in range(nnodes)])
+
+
+#tt2 = np.multiply(tt, np.random.uniform(1,2,size=[nnodes, nnodes])) 
+#tt3 = np.multiply(tt2, np.random.uniform(1,2,size=[nnodes, nnodes])) 
+#utt = np.array([[[tt[i,j], tt2[i,j], tt3[i,j]] for i in range(nnodes)] for j in range(nnodes)])
+
+utt = np.load('ex2_dist_mat.npy')
+
+#%%
+np.save('ex3_dist_mat.npy', utt)
+
+
+#%%#%%
 data = pd.read_csv('randomOxDeliveries.csv')
 postcodes = np.unique(data['postcode'].values)
 
@@ -461,15 +552,12 @@ tt = dat_misc.build_tt_matrix(codes, [(i if i>-1 else 0) for i in hours], day)
 tt2 = np.array([[tt[i,j]*np.random.uniform(1,2) if np.random.randint(0,2) else tt[i,j] for j in range(nnodes)] for i in range(nnodes)])
 tt3 = np.array([[tt2[i,j]*np.random.uniform(1,2) if np.random.randint(0,2) else tt2[i,j] for j in range(nnodes)] for i in range(nnodes)])
 
-
+'''
 #tt2 = np.multiply(tt, np.random.uniform(1,2,size=[nnodes, nnodes])) 
 #tt3 = np.multiply(tt2, np.random.uniform(1,2,size=[nnodes, nnodes])) 
+'''
 utt = np.array([[[tt[i,j], tt2[i,j], tt3[i,j]] for i in range(nnodes)] for j in range(nnodes)])
 
-#%%
- np.save('ex3_dist_mat', utt)
-
-
-
+#utt = np.load('ex2_dist_mat.npy')
 
 
