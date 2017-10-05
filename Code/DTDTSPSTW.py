@@ -8,7 +8,6 @@ Created on Tue Sep  5 09:22:03 2017
 
 
 import numpy as np
-import scipy.optimize as so
 import matplotlib.pyplot as plt
 import cplex
 import scipy.sparse as ss
@@ -17,7 +16,7 @@ import scipy.sparse as ss
 #%%
 
 class DTDTSPSTW(object):
-    def __init__(self, nnodes, DeliveryWindows,travel_times, Time_Windows, service_time, penalty_params):
+    def __init__(self, nnodes, DeliveryWindows,travel_times, Time_Windows, service_time, penalty_params, name = 'discrete_problem.lp'):
         #nnodes should be an integer, equal to the number of customers, plus one more for the depot.
         #Timewindows should be a matrix with nnodes rows and 2 columns. For a given row, the two values in the matrix refer to the time after which the delivery may be made, and the time before which the delivery must be made.
         
@@ -27,6 +26,7 @@ class DTDTSPSTW(object):
         if np.size(travel_times, 0)!= nnodes:
             raise ValueError("Invalid input, the first and 2nd dimensional lengths of the travel time tensor should equal the number of nodes")
         
+        self.name = name
         self.tolerable_lateness = -1.0 * penalty_params[2]/(penalty_params[1] - penalty_params[0])
         self.service_time = service_time
 
@@ -347,6 +347,7 @@ class DTDTSPSTW(object):
     
     def formulate(self):
         problem = cplex.Cplex();
+        self.timestart = problem.get_time()
         
         problem.objective.set_sense(problem.objective.sense.minimize)
         
@@ -383,37 +384,47 @@ class DTDTSPSTW(object):
         
         return problem
         
-     
-    def summary(self):
+    def solve(self):
         p = self.formulate();
-        p.write('discrete_problem.lp')
+        p.write(self.name)
         
         p.solve();
+        self.timeend = p.get_time()
         
-        if p.solution.status[p.solution.get_status()] =='MIP_optimal':
-            sol = p.solution.get_values();
+        self.success = (p.solution.status[p.solution.get_status()]=='MIP_optimal')
+        self.time_taken = self.timeend - self.timestart
+        
+        if self.success:
+            sol = p.solution.get_values()
+    
+            self.edge_vals = sol[:self.m]
+            self.travel_time_vals = sol[self.m:2*self.m]
+            self.time_slot_vals = sol[2*self.m:2*self.m+self.kappa]
+            self.arrival_time_vals = sol[2*self.m+self.kappa: 2*self.m+self.kappa+self.n]
+            self.lateness_vals = sol[2*self.m+self.kappa +self.n: 2*self.m+self.kappa+2*self.n]
+        return p
+    
+    def summary(self):
+        
+        if self.success:
             
-            self.travelled_edges = [self.edges[i] for i in range(self.m) if sol[i]]
+            self.travelled_edges = [self.edges[i] for i in range(self.m) if self.edge_vals[i]]
             #self.applied_travel_times = [sol[self.m + i] for i in range(self.m) if sol[i]]
             
-            self.route_info = [[self.edges[i], sol[self.m+i]] for i in range(self.m) if sol[i]]
+            self.route_info = [[self.edges[i], self.travel_time_vals[i]] for i in range(self.m) if self.edge_vals[i]]
             
             tour_route=[0];
             while len(tour_route)<self.n+1:
                 tour_route.append(self.travelled_edges[tour_route[-1]][1])
             print(tour_route)
             
-            self.arrival_times = sol[2*self.m + self.kappa: 2*self.m+self.kappa+self.n]
-            self.lateness = sol[2*self.m + self.kappa + self.n:]
-            print(self.lateness)
-            print(self.arrival_times)
+            print(self.lateness_vals)
+            print(self.arrival_time_vals)
             print(self.DW)
+            print(self.time_taken)
             
         else:
             print('No solution exists')
-    
-    
-        return p
 
 
 
