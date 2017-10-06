@@ -8,13 +8,11 @@ Created on Tue Sep  5 09:22:03 2017
 
 
 import numpy as np
-import matplotlib.pyplot as plt
 import cplex
 import scipy.sparse as ss
 
 
-#%%
-
+#This object solves the Discretely Time Dependent Travelling Salesman Problem with Time Windows
 class DTDTSPSTW(object):
     def __init__(self, nnodes, DeliveryWindows,travel_times, Time_Windows, service_time, penalty_params, name = 'discrete_problem.lp'):
         #nnodes should be an integer, equal to the number of customers, plus one more for the depot.
@@ -42,10 +40,10 @@ class DTDTSPSTW(object):
         #Record the times of the day when travel times change. That is, between self.TW[j] and self.TW[j+1] one framework applies. However, after self.TW[j], then the rules changes. Overall, travel times must be piecewise linear though, so things don't change too much.
         self.Theta = Time_Windows
         
-        #We introduce a dummy variable chi_{i,k} which implies that node i is departed during time slot k. Due to Delivery Windows, certain values of chi are restricted in advance, similar to how certain edges are restricted in advance. We record the list of chi's which might take a value of 1, ignoring the others which are restricted to 0.
+        #We introduce a dummy variable y_{i,k} which implies that node i is departed during time slot k. Due to Delivery Windows, certain values of y are restricted in advance, similar to how certain edges are restricted in advance. We record the list of y's which might take a value of 1, ignoring the others which are restricted to 0.
         self.departureSlots = self.ImportantDepartureSlots()
         
-        #record the number of possible chi's which exist. 
+        #record the number of possible y's which exist. 
         self.kappa = len(self.slots)        
         
   
@@ -61,8 +59,20 @@ class DTDTSPSTW(object):
         self.M = 100000
             
 
-        self.prep() 
+        self.combos = [[ii,jj, kk] for ii in range(self.n) for jj in self.outSet[ii] for kk in      self.departureSlots[ii]]
+        self.K2 = len(self.combos)
         
+        
+        temp = np.zeros([self.n, self.n, self.K])
+        
+        count = 1
+        for i in self.combos:
+            temp[i[0], i[1], i[2] ]= count
+            count +=1
+        
+        self.ijk_to_ind = [[] for _ in range(self.K)]
+        for k in range(self.K):
+            self.ijk_to_ind[k] = ss.csc_matrix(temp[:, :,k], dtype=int)        
         
         #print(self.departureSlots)
         
@@ -82,7 +92,6 @@ class DTDTSPSTW(object):
         self.obj =[0]*(2*self.m+self.kappa)+ [1]+[0]*(self.n-1)+[penalty_params[0]]*(self.n-1)
         
         
-        #elf.ConstraintLHS()
     
     def indexSlotMap(self, i,j,k):
         return self.ijk_to_ind[k][i,j]-1
@@ -92,22 +101,7 @@ class DTDTSPSTW(object):
 
     def slotMap(self, i,j):
         return self.slotInv[i,j] -1
-    
-    def prep(self):
-        self.combos = [[ii,jj, kk] for ii in range(self.n) for jj in self.outSet[ii] for kk in self.departureSlots[ii]]
-        self.K2 = len(self.combos)
-        
-        
-        temp = np.zeros([self.n, self.n, self.K])
-        
-        count = 1
-        for i in self.combos:
-            temp[i[0], i[1], i[2] ]= count
-            count +=1
-        
-        self.ijk_to_ind = [[] for _ in range(self.K)]
-        for k in range(self.K):
-            self.ijk_to_ind[k] = ss.csc_matrix(temp[:, :,k], dtype=int)
+          
     
     def ImportantDepartureSlots(self):
         possibilities = [[] for i in range(self.n)]
@@ -130,7 +124,6 @@ class DTDTSPSTW(object):
         for i in range(self.n):
             for j in possibilities[i]:
                 self.slots.append([i,j])
-        #self.slots = [[i,j] for j in possibilities[i] for i in range(self.nnodes)]
         
         slotInv = np.zeros([self.n, self.K])
         count = 1;
@@ -262,27 +255,25 @@ class DTDTSPSTW(object):
                 
                 inds = [3*self.n + i-self.m]+[self.neqcons+i-self.m]
                 vals = [1]+[-1]
-                
-                #print(ii,jj,self.departureSlots[ii], inds)
-                
+                                
                 A[i] = cplex.SparsePair(ind = inds, val = vals)
                 
-            #next the chi departure slot variables
+            #next the y departure slot variables
             elif i <2*self.m +self.kappa:
-                #the ik coordinates of this chi variable are:
+                #the ik coordinates of this y variable are:
                 base = 2*self.m
-                chii = self.slots[i-base][0]
-                chik = self.slots[i-base][1]
+                yi = self.slots[i-base][0]
+                yk = self.slots[i-base][1]
                 
-                ind1 = [chii+2*self.n]
+                ind1 = [yi+2*self.n]
                 val1 = [1 ]
                 
-                ind2 = [3*self.n + self.indexMap(chii, jj) for jj in self.outSet[chii]]
-                val2 = [-self.tt[self.indexMap(chii,jj), chik] for jj in self.outSet[chii]]
+                ind2 = [3*self.n + self.indexMap(yi, jj) for jj in self.outSet[yi]]
+                val2 = [-self.tt[self.indexMap(yi,jj), yk] for jj in self.outSet[yi]]
                 
-                if chii:
-                    ind3 = [chii+self.neqcons+self.m -1, chii+self.neqcons+self.m +self.n-2]
-                    val3 = [-self.Theta[chik+1], -self.Theta[chik]]
+                if yi:
+                    ind3 = [yi+self.neqcons+self.m -1, yi+self.neqcons+self.m +self.n-2]
+                    val3 = [-self.Theta[yk+1], -self.Theta[yk]]
                 else:
                     ind3 = []
                     val3 = []
@@ -293,8 +284,6 @@ class DTDTSPSTW(object):
             elif i <2*self.m + self.kappa + self.n:
                 base = 2*self.m + self.kappa
                 ii = i-base
-                #ii = self.edges[i-base][0]
-                #jj = self.edges[i-base][1]
                 
                 ind1 = [self.neqcons+ self.indexMap(jj, ii) for jj in self.inSet[ii]]
                 val1 = [1 for _ in ind1]
@@ -320,7 +309,6 @@ class DTDTSPSTW(object):
                 base = 2*self.m + self.kappa + self.n
 
                 A[i] = cplex.SparsePair(ind=[i-base+self.neqcons + self.m+ 2*(self.n-1)], val = [-1])
-            #print(A[i])     
         return A;
     
     def ConstraintRHS(self):
@@ -334,7 +322,7 @@ class DTDTSPSTW(object):
                 b[self.neqcons +i] = (-self.M + self.service_time)
             
             elif i <self.m + 2*(self.n-1):
-                #rhs for constraints which determine the chi variable, that is during which time slot the node i is departed from.
+                #rhs for constraints which determine the y variable, that is during which time slot the node i is departed from.
                 b[self.neqcons+i] = -self.service_time
             elif i <self.m + 3*(self.n-1):
                 #Finally we determine lateness
@@ -346,138 +334,66 @@ class DTDTSPSTW(object):
         return b, con_type
     
     def formulate(self):
+        #create cplex problem object
         problem = cplex.Cplex();
+        
+        #start the timer...
         self.timestart = problem.get_time()
         
+        #declare that we aim to minimize the object
         problem.objective.set_sense(problem.objective.sense.minimize)
         
-        self.names = ["e_"+str(i[0])+","+str(i[1]) for i in self.edges]+ ["t_"+str(i[0])+","+str(i[1]) for i in self.edges] + ["Chi_"+str(i[0])+","+str(i[1]) for i in self.slots] + ["T"+str(i) for i in range(self.n)]  +["r"+str(i) for i in range(1,self.n)]
+        #name each variable
+        self.names = ["e_"+str(i[0])+","+str(i[1]) for i in self.edges]+ ["t_"+str(i[0])+","+str(i[1]) for i in self.edges] + ["y_"+str(i[0])+","+str(i[1]) for i in self.slots] + ["T"+str(i) for i in range(self.n)]  +["r"+str(i) for i in range(1,self.n)]
         
-        
+        #insert upper bounds
         my_ubs = [1 for _ in range(self.m)] +[self.M for _ in range(self.m)]+[1 for _ in range(self.kappa)] +[self.M for i in range(self.n)] +[self.M for _ in range(self.n-1)]
         
+        #insert lower bounds
         my_lbs = [0 for _ in range(2*self.m+self.kappa)]+[self.DW[j,0] for j in range(self.n)]+[0 for _ in range(self.n-1)]
         
+        #declare variable types
         my_types = [problem.variables.type.binary for _ in range(self.m)]+[problem.variables.type.continuous for _ in range(self.m)]+[problem.variables.type.binary for _ in range(self.kappa)] +[problem.variables.type.continuous for _ in range(2*self.n-1)]
         
+        #compute constraint vector
         my_rhs, con_type = self.ConstraintRHS()
-
+        
+        #name constraints
         my_con_names = ["c"+str(i) for i in range(self.neqcons + self.nineqcons)]
+        
+        #add linear constraint details to cplex object                
         problem.linear_constraints.add( rhs = my_rhs, senses = con_type, names = my_con_names)
-        
-        
-        
-        #All of the lower bounds take the default value of 0
-                
-        
+
+        #compute constaint matrix
         self.LHS = self.ConstraintLHS()
         
-        
-        #print(len(my_types), len(my_lbs), len(my_ubs), len(self.names))
-        #print(len(self.obj), len(self.names), len(my_ubs), len(my_lbs), len(my_types), len(self.LHS))
-        
-        #print(self.obj)
+        #finish constructing cplex problem object
         problem.variables.add(obj = self.obj, names = self.names, ub = my_ubs, lb = my_lbs, types = my_types, columns =  self.LHS)
-        #, columns =  self.LHS
-        
-        
-        
+
+        #return cplex problem object.
         return problem
         
     def solve(self):
+        #get cplex problem object
         p = self.formulate();
+        #write cplex problem to file
         p.write(self.name)
-        
+        #solve cplex problem
         p.solve();
         self.timeend = p.get_time()
         
+        #check if cplex was successful
         self.success = (p.solution.status[p.solution.get_status()]=='MIP_optimal')
+        #record time taken
         self.time_taken = self.timeend - self.timestart
         
         if self.success:
             sol = p.solution.get_values()
-    
+            #record summary details
             self.edge_vals = sol[:self.m]
             self.travel_time_vals = sol[self.m:2*self.m]
             self.time_slot_vals = sol[2*self.m:2*self.m+self.kappa]
             self.arrival_time_vals = sol[2*self.m+self.kappa: 2*self.m+self.kappa+self.n]
             self.lateness_vals = sol[2*self.m+self.kappa +self.n: 2*self.m+self.kappa+2*self.n]
         return p
-    
-    def summary(self):
-        
-        if self.success:
-            
-            self.travelled_edges = [self.edges[i] for i in range(self.m) if self.edge_vals[i]]
-            #self.applied_travel_times = [sol[self.m + i] for i in range(self.m) if sol[i]]
-            
-            self.route_info = [[self.edges[i], self.travel_time_vals[i]] for i in range(self.m) if self.edge_vals[i]]
-            
-            tour_route=[0];
-            while len(tour_route)<self.n+1:
-                tour_route.append(self.travelled_edges[tour_route[-1]][1])
-            print(tour_route)
-            
-            print(self.lateness_vals)
-            print(self.arrival_time_vals)
-            print(self.DW)
-            print(self.time_taken)
-            
-        else:
-            print('No solution exists')
 
-
-
-
-
-
-'''
-
-#%%
-servicetime = 5    
-toy_nnodes = 20;
-ntw = 20;
-
-hour = 60;
-
-toy_customer_bounds = np.random.uniform(low=0,high=8*hour, size=toy_nnodes-1)
-
-toy_TimeWindows = np.empty([toy_nnodes, 2])
-toy_TimeWindows[0] = np.array([0, 8.5*hour])
-toy_TimeWindows[1:,0] = toy_customer_bounds;
-toy_TimeWindows[1:, 1] = toy_customer_bounds+hour;
-
-toy_travel_times = np.array([[[0 if i==j else np.random.uniform(low = 5, high = hour) for k in range(ntw+1)] for i in range(toy_nnodes) ]for j in range(toy_nnodes)] )
-
-#TW = np.sort(np.random.uniform(0, 8.5*hour, size=(ntw-1)))
-TW = np.linspace(0, 9.5*hour, ntw+1)
-#TW = []
-
-tol_delay = 5
-intol_delay = 10
-alpha = 5
-beta = 100
-
-toy_pen_params = [5, 100, -950]
-
-
-
-#%%
-       
-toy = TDTSPSTW(toy_nnodes, toy_TimeWindows, toy_travel_times, TW, servicetime, toy_pen_params)   
-#print('\n\n')
-#print(toy.DW)
-#print(toy.Theta)
-#print('\n\n')
-
-#print(toy.edges)  
-
-#print(toy.ConstraintRHS())
-#print(toy.ConstraintLHS())
-#tmp = toy.formulate();
-#tmp.write("current_test.lp")
-
-
-#%%
-ans = toy.summary()
-'''
