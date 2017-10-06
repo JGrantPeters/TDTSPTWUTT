@@ -20,7 +20,7 @@ reload(LTDTSPSTW)
 #%%
 
 servicetime = 5    
-toy_nnodes = 15;
+toy_nnodes = 10;
 
 #number of linear time windows
 nltw = 5;
@@ -81,7 +81,7 @@ discrete = DTDTSPSTW.DTDTSPSTW(toy_nnodes, toy_TimeWindows, discrete_toy_travel_
 #%%
 a=linear.solve()
 
-print(linear.arrival_time_vals, linear.lateness_vals, linear.edge_vals)
+linear.summary()
 #%%
 discrete.solve()
-print(discrete.arrival_time_vals, discrete.lateness_vals, discrete.edge_vals)
+discrete.summary()

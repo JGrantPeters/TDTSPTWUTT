@@ -397,3 +397,25 @@ class DTDTSPSTW(object):
             self.lateness_vals = sol[2*self.m+self.kappa +self.n: 2*self.m+self.kappa+2*self.n]
         return p
 
+    def summary(self):
+          if self.success:
+              self.travelled_edges = [self.edges[i] for i in range(self.m) if self.edge_vals[i]]
+              		              
+              self.route_info = [[self.edges[i], self.travel_time_vals[i]] for i in range(self.m) if self.edge_vals[i]]
+              		              
+              tour_route=[0];
+              
+              while len(tour_route)<self.n+1:
+                 tour_route.append(self.travelled_edges[tour_route[-1]][1])
+                 
+              print('\n\nCustomers are visited in the following sequence')
+              print(tour_route)
+              
+              print('\n\nThis is how late each customer is arrived to at')
+              print(self.lateness_vals)
+              print('\n\nThe arrival time at each customer')
+              print(self.arrival_time_vals)
+              print('Timet taken for journey')
+              print(self.time_taken)
+          else:
+              print('No solution exists')
