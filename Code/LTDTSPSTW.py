@@ -425,3 +425,22 @@ class LTDTSPSTW(object):
         #return solved cplex object
         return p
     
+    def summary(self):
+          if self.success:
+              self.travelled_edges = [self.edges[i] for i in range(self.m) if self.edge_vals[i]]
+              		              
+              self.route_info = [[self.edges[i], self.travel_time_vals[i]] for i in range(self.m) if self.edge_vals[i]]
+              		              
+              tour_route=[0];
+              
+              while len(tour_route)<self.n+1:
+                 tour_route.append(self.travelled_edges[tour_route[-1]][1])
+              print(tour_route)
+              
+              print(self.lateness_vals)
+              
+              print(self.arrival_time_vals)
+              print(self.DW)
+              print(self.time_taken)
+          else:
+              print('No solution exists')
