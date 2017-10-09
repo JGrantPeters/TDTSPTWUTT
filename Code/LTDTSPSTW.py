@@ -435,12 +435,15 @@ class LTDTSPSTW(object):
               
               while len(tour_route)<self.n+1:
                  tour_route.append(self.travelled_edges[tour_route[-1]][1])
+                 
+              print('\n\nCustomers are visited in the following sequence')
               print(tour_route)
               
+              print('\n\nThis is how late each customer is arrived to at')
               print(self.lateness_vals)
-              
+              print('\n\nThe arrival time at each customer')
               print(self.arrival_time_vals)
-              print(self.DW)
+              print('Timet taken for journey')
               print(self.time_taken)
           else:
               print('No solution exists')
