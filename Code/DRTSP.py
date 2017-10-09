@@ -7,38 +7,11 @@ Created on Mon Sep 18 12:16:00 2017
 """
 
 import numpy as np
-import pandas as pd
 import itertools
-import datetime
 import scipy as sp
 
 
 
-big_mat_utt = np.load('big_mat.npy')
-postcodes = np.load('codes.npy')
-
-
-nnodes = 17
-inds = np.random.choice(len(postcodes), nnodes)
-codes = postcodes[inds]
-
-nbins = 4;
-
-day = datetime.datetime(2017, 9, 29)
-hours = np.zeros([nnodes], dtype = int)
-inds = np.random.permutation(nnodes)
-
-for i in range(1,nnodes):
-    hours[inds[i]] = int((i-1)/(nnodes/nbins))
-hours[inds[0]]= -1
-
-
-utt = np.array([[big_mat_utt[i, j, :] for i in inds] for j in inds])
-
-utt = np.multiply(utt, 1.3)
-
-
-#%%
 
 class DRTSP(object):
     def __init__(self, Locations, Hours, start_day_time, utt):
@@ -114,7 +87,7 @@ class DRTSP(object):
                 #route is the sequence of customers to be visited in this subproblem
                 route = [i0]+[i for i in sigma]+[j0];
                 #tt is the reduces travel times matrix for this subproblem
-                tt = np.array([[utt[ii,jj,s[k]] for jj in route]for ii in route] )
+                tt = np.array([[self.utt[ii,jj,s[k]] for jj in route]for ii in route] )
                 #arrivals computes the relative arrival time at each customer in this subproblem
                 arrivals = Measure(route, tt, self.service_time)
                 
@@ -166,7 +139,7 @@ class DRTSP(object):
                         #route is the sequence of customers to be visited in this subproblem
                         route = [i0]+[i for i in sigma]+[j0];
                         #tt is the reduces travel times matrix for this subproblem
-                        tt = np.array([[utt[ii,jj,s[k]]  for jj in route]for ii in route])
+                        tt = np.array([[self.utt[ii,jj,s[k]]  for jj in route]for ii in route])
 
                         #arrivals computes the relative arrival time at each customer in this subproblem
                         arrivals = Measure(route, tt, self.service_time)
@@ -205,7 +178,7 @@ class DRTSP(object):
             #we leave from the depot at time 0
             aim = 0
             #label aj0, the arrival time at the first node
-            aj0 = aim + self.service_time+utt[i0,j0,0]
+            aj0 = aim + self.service_time+self.utt[i0,j0,0]
             
             #regret is the journey time to j0, plus the regret for finishing from j0
             local_regret = aj0 +regret[j0]
@@ -236,8 +209,9 @@ class DRTSP(object):
         #That is the best possible route for each scenario if that scenario is 
         #known in advance.
         self.pR = np.zeros([self.nSC])
+        self.pRoutes = np.zeros([self.nSC, self.n+1], dtype=int)
         for s in range(self.nSC):
-            self.pR[s],  _ = self.solvePrecient(self.SC[s],param)
+            self.pR[s],  self.pRoutes[s] = self.solvePrecient(self.SC[s],param)
             
         #Full route is the matrix of arrays which correspond to the best way to finish
         #the journey if staring from i0, in scenario s.
@@ -282,7 +256,7 @@ class DRTSP(object):
                         #route is the sequence in which the customers are visited given sigma
                         route = [i0]+[i for i in sigma]+[j0];
                         #tt is the reduced distance matrix.
-                        tt = np.array([[utt[ii,jj,sk] for jj in route] for ii in route])
+                        tt = np.array([[self.utt[ii,jj,sk] for jj in route] for ii in route])
                         #arrivals is the vector of local arrival times
                         arrivals = Measure(route, tt, self.service_time)
                         
@@ -356,7 +330,7 @@ class DRTSP(object):
                                 #route is the sequence in which the customers are vistited
                                 route = [i0]+[i for i in sigma]+[j0];
                                 #tt is the reduced travel time matrix
-                                tt = np.array([[utt[ii,jj,sk]  for jj in route]for ii in route])
+                                tt = np.array([[self.utt[ii,jj,sk]  for jj in route]for ii in route])
                                 #the local arrival times at customers in the 'current' time window
                                 arrivals = Measure(route, tt, self.service_time)
                                 
@@ -432,7 +406,7 @@ class DRTSP(object):
             for s in Branch:
                 #we depart the depot at time 0
                 aim = 0
-                aj0 = aim +self.service_time+ utt[i0,j0,0]
+                aj0 = aim +self.service_time+ self.utt[i0,j0,0]
                 
                 #regret is the time of our first delivery plus the regret of finishing
                 #from there
@@ -461,8 +435,7 @@ class DRTSP(object):
             print('OPT')
             print(i0, jstar,s, ALPijs[i0,jstar,s])
             print('---------')
-
-              
+      
         self.path = full_route[self.indDepot]
         print(self.path)
 
@@ -478,12 +451,12 @@ def Measure(route, tt, service_time):
         
 def Regret(n,route, utt, scenario, DW, servicetime):
     #compute the regret for a paricular route given a scenario
-    K = np.max(hours)+1;
+    K = np.max(DW)+1;
     regret = 0;
     for k in range(K-1, -1, -1):
         local_regret = 0;
         
-        local_inds = [route.index(i) for i in route if hours[i] ==k]
+        local_inds = [route.index(i) for i in route if DW[i] ==k]
         local_n = len(local_inds)
         local_regret = 0
         local_delay = 0
@@ -498,91 +471,4 @@ def Regret(n,route, utt, scenario, DW, servicetime):
         
         regret = np.maximum(local_regret, regret + np.maximum(local_delay, 0) )
     return regret    
-
-    
-
-    #%%
-ex = DRTSP(codes, hours, day,utt)
-#s4 = ex.SC[4]
-#s5 = ex.SC[5]
-#s10 = ex.SC[10]
-
-
-
-#for s in ex.SC:
-#    print(ex.solvePrecient(s))
-
-
-
-for s in range(11):
-    #print(ex.SC[s])
-    print('--------------------')
-    print('New Scenario')    
-    print('--------------------')
-
-    s1 = ex.SC[s]
-    a1 = ex.solvePrecient(s1)
-    regret = a1[0]
-    route = a1[1]
-    regret2 = Regret(nnodes, route, utt, s1, hours, 5)
-    
-    
-
-    
-    #print('FLAG')
-    #print(arrivals)
-    print(regret, regret2, regret-regret2)
-    #print(a1[1])
-    #print('FLAG')
-    #print([ex.reg[i] for i in a1[1]])
-
-    
-#route = [ 6, 15,  2 ,16,  5]
-
-
-
-'''
-
-ex.solve()
-
-for s in range(ex.nSC):
-    print('-------------------')
-    print('Scenario')
-    print('-------------------')
-    
-    base = ex.solvePrecient(ex.SC[s])
-    base_reg = base[0]
-    print(base[1])
-    for scen in ex.SC:
-        sol = ex.solvePrecient(scen)
-        #scen_regret = sol[0];
-        scen_regret = Regret(nnodes, sol[1], utt, ex.SC[s], hours, 5)
-        print(scen_regret/base_reg)
-        
-    print('+++++++++++++++++++')
-    print('Recourse')
-    rec = ex.path[s]
-    print(rec)
-    Rrec = Regret(ex.n, rec, utt, ex.SC[s], hours, 5)
-    print(Rrec/base_reg)
-    print('+++++++++++++++++++')
-'''
-
-#a10 = ex.solvePrecient(s10)
-
-#a4 = ex.solvePrecient(s4)
-#a5 = ex.solvePrecient(s5)
-
-#print(Regret(17,route, utt, ex.SC[0], hours, 5))
-#print(a0[0])
-#%%
-
-for i in ex.pROUTES:
-    print([j for j in i])
-    
-print('-------------------------------------------------------------')
-print('-------------------------------------------------------------')
-for i in ex.path:
-    print(i)
-
 
